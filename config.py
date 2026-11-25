@@ -43,6 +43,7 @@ DEFAULTS = {
     "sandbox_network": True,     # Netzwerk in der bwrap-Sandbox erlauben (pip etc.)
     "require_sandbox": True,     # ohne funktionierende Sandbox keine Agenten starten
     "win_job_memory_mb": 2048,   # Windows: Speicherlimit je bash-Befehl (0 = aus)
+    "win_sandbox_level": "auto", # Windows: auto | strict | lowil
     "verify_on_finish": True,    # finish nur akzeptieren, wenn pytest grün ist
     "subagents_enabled": True,   # Tools subagent/swarm für Hauptagenten
     "max_subagents": 4,          # max. Pakete pro Schwarm

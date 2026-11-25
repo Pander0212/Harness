@@ -192,6 +192,7 @@ def init_windows_sandbox(cfg):
         if not find_windows_bash():
             WIN_STATE.update(level=None, message=shell_status()[1])
             return WIN_STATE
+        winsandbox.suppress_error_dialogs()
         try:
             winsandbox.protect(cfg.path)
             winsandbox.protect(cfg.path_of("data_dir"))
@@ -206,14 +207,31 @@ def init_windows_sandbox(cfg):
                            output_limit=2000, win_level=level)
             code, out, _ = r.run(command, timeout=60)
             return code, out
+        want = cfg.get("win_sandbox_level", "auto")
+        levels = ["strict", "lowil"] if want not in ("strict", "lowil") else [want]
+        cache = os.path.join(cfg.path_of("data_dir"), "sandbox_level.txt")
+        try:  # zuletzt funktionierende Stufe zuerst testen
+            with open(cache, encoding="utf-8") as f:
+                last = f.read().strip()
+            if last in levels:
+                levels.remove(last)
+                levels.insert(0, last)
+        except OSError:
+            pass
         res = winsandbox.selftest(run_fn, ws_root, cfg.base_dir, cfg.path,
-                                  os.path.expanduser("~"))
+                                  os.path.expanduser("~"), levels=levels)
         if res["level"]:
             for d in cfg.allowed_dirs():
                 try:
                     winsandbox.prepare_workspace(d, strict=res["level"] == "strict")
                 except Exception as e:
                     res["message"] += f" (Hinweis: {d} nicht vorbereitet: {e})"
+        if res["level"]:
+            try:
+                with open(cache, "w", encoding="utf-8") as f:
+                    f.write(res["level"])
+            except OSError:
+                pass
         WIN_STATE.update(res)
         return WIN_STATE
 

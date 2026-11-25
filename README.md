@@ -192,7 +192,8 @@ Beim Start prüft der Harness das alles mit einem **Selbsttest** (Schreiben im W
 ok, Schreiben außerhalb blockiert, `config.json` unlesbar, keine Admin-Rechte, ggf.
 Profil unlesbar). Im UI steht dann grün „Sandbox aktiv: …“. Schlägt der Test fehl,
 werden **keine Agenten gestartet** (`require_sandbox`), und das UI zeigt den Grund.
-Netzwerkzugriff bleibt erlaubt. Ordner auf anderen Laufwerken, die „Jeder“ lesen darf,
+Die zuletzt funktionierende Stufe wird in `data\\sandbox_level.txt` gemerkt und beim
+nächsten Start zuerst getestet. Netzwerkzugriff bleibt erlaubt. Ordner auf anderen Laufwerken, die „Jeder“ lesen darf,
 bleiben lesbar. Bestätige nie eine UAC-Abfrage, die du nicht selbst ausgelöst hast.
 
 Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
@@ -229,6 +230,7 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `sandbox` | auto | `auto` (bwrap unter Linux, Token-Sandbox unter Windows) oder `none` |
 | `require_sandbox` | true | ohne funktionierende Sandbox keine Agenten starten |
 | `win_job_memory_mb` | 2048 | Windows: Speicherlimit je Befehl (0 = aus) |
+| `win_sandbox_level` | auto | Windows: `auto` (erst streng, dann Low), `strict` oder `lowil` erzwingen |
 | `price_input_per_m` / `price_output_per_m` | 0.135 / 2.25 | $ pro 1 Mio. Tokens |
 | `max_log_mb` / `log_keep` | 50 / 5 | Rotation der Gesprächsprotokolle |
 | `ui_host`, `ui_port`, `ui_password` | 127.0.0.1, 8765, "" | Web-UI |

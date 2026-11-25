@@ -25,6 +25,8 @@ def fake_runner(behaviour):
 
 
 def good(level, cmd, ws):
+    if cmd == "echo start-ok":
+        return 0, "start-ok"
     if cmd.startswith("echo ok"):
         return 0, "ok"
     if "python" in cmd:
@@ -117,3 +119,30 @@ def test_bwrap_hides_mounts(tmp_path):
     for h in ("/home", "/root", "/mnt", "/media"):
         if os.path.isdir(h):
             assert f"--tmpfs {h}" in cmd
+
+
+def test_failed_process_start_skips_level_quickly(tmp_path, no_labels):
+    def beh(level, cmd, ws):
+        if level == "strict":
+            return -1073741502, ""          # 0xC0000142 DLL-Initialisierung
+        return good(level, cmd, ws)
+    run, calls = fake_runner(beh)
+    res = winsandbox.selftest(run, str(tmp_path / "ws"), str(tmp_path), str(tmp_path / "c.json"),
+                              str(tmp_path / "home"))
+    assert res["level"] == "lowil"
+    assert sum(1 for lvl, _ in calls if lvl == "strict") == 1   # nur ein Startversuch
+
+
+def test_all_levels_fail_reports_code(tmp_path, no_labels):
+    run, calls = fake_runner(lambda level, cmd, ws: (-1073741502, ""))
+    res = winsandbox.selftest(run, str(tmp_path / "ws"), str(tmp_path), str(tmp_path / "c.json"),
+                              None)
+    assert res["level"] is None and len(calls) == 2
+    assert "0xC0000142" in res["message"] and "DLL" in res["message"]
+
+
+def test_forced_level(tmp_path, no_labels):
+    run, calls = fake_runner(good)
+    res = winsandbox.selftest(run, str(tmp_path / "ws"), str(tmp_path), str(tmp_path / "c.json"),
+                              None, levels=("lowil",))
+    assert res["level"] == "lowil" and {lvl for lvl, _ in calls} == {"lowil"}

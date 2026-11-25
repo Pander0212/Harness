@@ -38,6 +38,7 @@
   "sandbox_network": true,
   "require_sandbox": true,
   "win_job_memory_mb": 2048,
+  "win_sandbox_level": "auto",
   "verify_on_finish": true,
   "subagents_enabled": true,
   "max_subagents": 4,

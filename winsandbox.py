@@ -120,6 +120,16 @@ if IS_WINDOWS:  # pragma: no cover - nur unter Windows
     GetSecurityDescriptorSacl = _fn(adv, "GetSecurityDescriptorSacl", wt.BOOL,
                                     ctypes.c_void_p, ctypes.POINTER(wt.BOOL),
                                     ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wt.BOOL))
+    ConvertSidToStringSidW = _fn(adv, "ConvertSidToStringSidW", wt.BOOL, ctypes.c_void_p,
+                                 ctypes.POINTER(ctypes.c_void_p))
+    GetSecurityDescriptorDacl = _fn(adv, "GetSecurityDescriptorDacl", wt.BOOL,
+                                    ctypes.c_void_p, ctypes.POINTER(wt.BOOL),
+                                    ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wt.BOOL))
+    SetErrorMode = _fn(k32, "SetErrorMode", wt.UINT, wt.UINT)
+
+    class TOKEN_DEFAULT_DACL(ctypes.Structure):
+        _fields_ = [("DefaultDacl", ctypes.c_void_p)]
+
     SetNamedSecurityInfoW = _fn(adv, "SetNamedSecurityInfoW", wt.DWORD, wt.LPWSTR,
                                 ctypes.c_int, wt.DWORD, ctypes.c_void_p, ctypes.c_void_p,
                                 ctypes.c_void_p, ctypes.c_void_p)
@@ -128,7 +138,11 @@ TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY, TOKEN_ADJUST_DEFAULT = 0x1, 
 DISABLE_MAX_PRIVILEGE = 0x1
 SE_GROUP_INTEGRITY = 0x20
 SE_GROUP_LOGON_ID = 0xC0000000
-TokenGroups, TokenIntegrityLevel = 2, 25
+TokenUser, TokenGroups, TokenDefaultDacl, TokenIntegrityLevel = 1, 2, 6, 25
+STATUS_DLL_INIT_FAILED = 0xC0000142
+# keine Fehlerdialoge (z. B. 0xc0000142) für Kindprozesse – sie erben den Fehlermodus
+SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX, SEM_NOOPENFILEERRORBOX = 0x1, 0x2, 0x8000
+JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION = 0x400
 LOW_IL_SID = "S-1-16-4096"
 ADMINS_SID = "S-1-5-32-544"
 RESTRICTING_SIDS = ["S-1-1-0", "S-1-5-32-545", "S-1-5-11", "S-1-5-12"]  # Jeder, Benutzer,
@@ -214,6 +228,57 @@ def protect(path):
 
 # --------------------------------------------------------------------------- Token / Prozess
 
+def suppress_error_dialogs():
+    """Fehlerfenster wie 'Anwendung konnte nicht korrekt gestartet werden' unterdrücken.
+    Der Modus wird von allen Kindprozessen geerbt."""
+    try:
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX)
+    except Exception:
+        pass
+
+
+def _sid_str(psid):
+    out = ctypes.c_void_p()
+    if not ConvertSidToStringSidW(psid, ctypes.byref(out)):
+        raise _err("ConvertSidToStringSid")
+    try:
+        return ctypes.wstring_at(out.value)
+    finally:
+        LocalFree(out)
+
+
+def _user_sid_str(token):
+    size = wt.DWORD()
+    GetTokenInformation(token, TokenUser, None, 0, ctypes.byref(size))
+    buf = ctypes.create_string_buffer(size.value)
+    if not GetTokenInformation(token, TokenUser, buf, size, ctypes.byref(size)):
+        raise _err("GetTokenInformation(TokenUser)")
+    return _sid_str(SID_AND_ATTRIBUTES.from_buffer(buf).Sid)
+
+
+def _set_default_dacl(tok, user_sid, logon_sid):
+    """Standard-DACL für neue Objekte des Prozesses: ohne RESTRICTED/Logon-SID könnte der
+    eingeschränkte Prozess seine eigenen Objekte nicht öffnen (-> 0xc0000142)."""
+    sddl = f"D:(A;;GA;;;SY)(A;;GA;;;{user_sid})(A;;GA;;;RC)"
+    if logon_sid:
+        sddl += f"(A;;GA;;;{logon_sid})"
+    psd = ctypes.c_void_p()
+    if not ConvertSD(sddl, 1, ctypes.byref(psd), None):
+        raise _err("ConvertStringSecurityDescriptor(DefaultDacl)")
+    try:
+        present, defaulted = wt.BOOL(), wt.BOOL()
+        pacl = ctypes.c_void_p()
+        if not GetSecurityDescriptorDacl(psd, ctypes.byref(present), ctypes.byref(pacl),
+                                         ctypes.byref(defaulted)):
+            raise _err("GetSecurityDescriptorDacl")
+        dd = TOKEN_DEFAULT_DACL(pacl)
+        if not SetTokenInformation(tok, TokenDefaultDacl, ctypes.byref(dd),
+                                   ctypes.sizeof(dd)):
+            raise _err("SetTokenInformation(DefaultDacl)")
+    finally:
+        LocalFree(psd)
+
+
 def _make_token(strict):
     cur = wt.HANDLE()
     if not OpenProcessToken(GetCurrentProcess(), TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE |
@@ -225,7 +290,7 @@ def _make_token(strict):
         keep.append(admins)
         disable = (SID_AND_ATTRIBUTES * 1)()
         disable[0].Sid = admins
-        restrict, n_restrict = None, 0
+        restrict, n_restrict, logon = None, 0, None
         if strict:
             sids = [_sid(s) for s in RESTRICTING_SIDS]
             keep += sids
@@ -240,6 +305,13 @@ def _make_token(strict):
         if not CreateRestrictedToken(cur, DISABLE_MAX_PRIVILEGE, 1, disable, 0, None,
                                      n_restrict, restrict, ctypes.byref(tok)):
             raise _err("CreateRestrictedToken")
+        if strict:
+            try:
+                _set_default_dacl(tok, _user_sid_str(cur),
+                                  _sid_str(logon) if logon else None)
+            except Exception:
+                CloseHandle(tok)
+                raise
         low = _sid(LOW_IL_SID)
         keep.append(low)
         tml = TOKEN_MANDATORY_LABEL()
@@ -279,7 +351,7 @@ def _make_job(mem_mb, ui_limits):
     if not job:
         raise _err("CreateJobObject")
     info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-    flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION
     if mem_mb:
         flags |= JOB_OBJECT_LIMIT_JOB_MEMORY
         info.JobMemoryLimit = int(mem_mb) * 1024 * 1024
@@ -375,13 +447,17 @@ class SandboxedProcess:
 
 # --------------------------------------------------------------------------- Selbsttest
 
-def selftest(run_fn, ws_root, base_dir, protected_file, home):
+def _hex(code):
+    return f"0x{(code or 0) & 0xFFFFFFFF:08X}"
+
+
+def selftest(run_fn, ws_root, base_dir, protected_file, home, levels=("strict", "lowil")):
     """run_fn(level, command, workspace) -> (code, output).
     Liefert dict(level, checks, message): level 'strict', 'lowil' oder None."""
     probe_ws = os.path.join(ws_root, ".sandbox-selftest")
     outside = os.path.join(base_dir, ".sandbox-probe.txt")
     report = []
-    for level in ("strict", "lowil"):
+    for level in levels:
         checks = []
         try:
             prepare_workspace(ws_root, strict=(level == "strict"))
@@ -389,6 +465,14 @@ def selftest(run_fn, ws_root, base_dir, protected_file, home):
             if os.path.exists(outside):
                 os.remove(outside)
             q = lambda p: p.replace("\\", "/")  # noqa: E731
+            # Kanarienvogel: startet überhaupt ein Prozess? Sonst Stufe sofort verwerfen.
+            code, out = run_fn(level, "echo start-ok", probe_ws)
+            if code != 0 or "start-ok" not in out:
+                hint = (" (DLL-Initialisierung fehlgeschlagen)"
+                        if (code or 0) & 0xFFFFFFFF == STATUS_DLL_INIT_FAILED else "")
+                checks.append(("Prozessstart", False, f"Code {_hex(code)}{hint} {out[-150:]}"))
+                report.append((level, checks))
+                continue
             code, out = run_fn(level, 'echo ok > inside.txt && cat inside.txt', probe_ws)
             checks.append(("Schreiben im Workspace", code == 0 and "ok" in out, out[-200:]))
             code, out = run_fn(level, 'python -c "print(6*7)"', probe_ws)
