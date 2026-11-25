@@ -1,50 +1,48 @@
 ---
 topic: crypto
+legacy_title: Kryptographie-Bibliothek von Grund auf mit TLS-1.3-artigem Protokoll
 ---
-# Kryptographie-Bibliothek von Grund auf mit TLS-1.3-artigem Protokoll
+# Cryptography Library from Scratch with a TLS-1.3-Like Protocol
 
-## Ziel
-Implementiere in reinem Python 3 – ohne `hashlib`, `hmac`, `secrets` oder `ssl` für die
-eigentlichen Algorithmen (nur für Vergleichstests und Zufallszahlen aus `os.urandom`
-erlaubt) – eine Kryptographie-Bibliothek und darauf ein vereinfachtes, aber
-kryptographisch vollständiges TLS-1.3-Handshake-Protokoll. Alle Algorithmen werden gegen
-offizielle Testvektoren geprüft. Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Implement, in pure Python 3 – without `hashlib`, `hmac`, `secrets` or `ssl` for the actual
+algorithms (allowed only for comparison tests and random numbers from `os.urandom`) – a
+cryptography library and on top of it a simplified but cryptographically complete
+TLS 1.3 handshake protocol. All algorithms are checked against official test vectors.
+Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Hashfunktionen**: SHA-256, SHA-512, SHA-384, SHA3-256/512 und SHAKE128/256
-   (Keccak), BLAKE2b; Streaming-API (`update`/`digest`/`copy`).
-2. **MACs und KDFs**: HMAC, HKDF (Extract/Expand, RFC 5869), PBKDF2, scrypt.
-3. **Blockchiffre AES-128/192/256** (Tabellen- und Referenzimplementierung) mit den Modi
-   ECB (nur für Tests), CBC mit PKCS#7, CTR und **GCM** (GHASH, RFC-konforme Tags).
-4. **ChaCha20-Poly1305** (RFC 8439) inklusive XChaCha20.
-5. **Großzahl- und Zahlentheorie**: modulare Exponentiation, Miller-Rabin, erweiterter
-   euklidischer Algorithmus, CRT; **RSA** mit Schlüsselerzeugung, OAEP und PSS.
-6. **Elliptische Kurven**: X25519 (RFC 7748, Montgomery-Leiter, konstanter Ablauf
-   angestrebt), Ed25519-Signaturen (RFC 8032), P-256 ECDSA mit deterministischem k
-   (RFC 6979).
-7. **Kodierungen**: Base64, PEM, eine ASN.1-DER-Teilmenge zum Lesen/Schreiben von
-   Schlüsseln.
-8. **TLS-1.3-ähnliches Protokoll** über einer In-Memory-Transportschicht: ClientHello/
-   ServerHello mit Schlüsselaustausch (X25519), Key Schedule nach RFC 8446 (Early,
-   Handshake, Application Secrets), verschlüsselte Handshake-Nachrichten,
-   Zertifikat (eigenes einfaches Format, signiert mit Ed25519), CertificateVerify,
-   Finished, Record Layer mit AES-GCM und ChaCha20-Poly1305, Key Update,
-   Session-Resumption mit PSK. Angriffe wie Downgrade und manipulierte Records müssen
-   erkannt werden.
+## Functional Requirements
+1. **Hash functions**: SHA-256, SHA-512, SHA-384, SHA3-256/512 and SHAKE128/256
+   (Keccak), BLAKE2b; streaming API (`update`/`digest`/`copy`).
+2. **MACs and KDFs**: HMAC, HKDF (extract/expand, RFC 5869), PBKDF2, scrypt.
+3. **Block cipher AES-128/192/256** (table-based and reference implementation) with the
+   modes ECB (tests only), CBC with PKCS#7, CTR and **GCM** (GHASH, RFC-compliant tags).
+4. **ChaCha20-Poly1305** (RFC 8439) including XChaCha20.
+5. **Big integers and number theory**: modular exponentiation, Miller-Rabin, extended
+   Euclidean algorithm, CRT; **RSA** with key generation, OAEP and PSS.
+6. **Elliptic curves**: X25519 (RFC 7748, Montgomery ladder, aim for constant flow),
+   Ed25519 signatures (RFC 8032), P-256 ECDSA with deterministic k (RFC 6979).
+7. **Encodings**: Base64, PEM, a subset of ASN.1 DER for reading/writing keys.
+8. **TLS-1.3-like protocol** over an in-memory transport: ClientHello/ServerHello with key
+   exchange (X25519), key schedule per RFC 8446 (early, handshake, application secrets),
+   encrypted handshake messages, certificate (your own simple format, signed with
+   Ed25519), CertificateVerify, Finished, record layer with AES-GCM and
+   ChaCha20-Poly1305, key update, session resumption with PSK. Attacks such as downgrade
+   and tampered records must be detected.
 
-## Teststrategie (pytest)
-- Offizielle Testvektoren: NIST (SHA, AES, GCM), RFC 4231 (HMAC), RFC 5869, RFC 8439,
-  RFC 7748, RFC 8032, RFC 6979 – mindestens 150 Vektoren.
-- Differenzielle Tests gegen `hashlib`/`hmac` mit 1000 zufälligen Eingaben (fester Seed).
-- Eigenschaftstests: Entschlüsseln(Verschlüsseln(x)) = x, Signatur-Verifikation,
-  Manipulation eines beliebigen Bits führt zu Fehler.
-- Protokolltests: vollständiger Handshake, Resumption, alle Fehlerpfade (falsche
-  Signatur, falsches Finished, Replay, Downgrade).
-- Mindestens 300 Testfälle.
+## Test Strategy (pytest)
+- Official test vectors: NIST (SHA, AES, GCM), RFC 4231 (HMAC), RFC 5869, RFC 8439,
+  RFC 7748, RFC 8032, RFC 6979 – at least 150 vectors.
+- Differential tests against `hashlib`/`hmac` with 1000 random inputs (fixed seed).
+- Property tests: decrypt(encrypt(x)) = x, signature verification, flipping any bit
+  causes an error.
+- Protocol tests: full handshake, resumption, all error paths (wrong signature, wrong
+  Finished, replay, downgrade).
+- At least 300 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; DESIGN.md beschreibt Sicherheitsannahmen und bekannte
-  Grenzen (z. B. Seitenkanäle in Python); README mit Beispielen.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; DESIGN.md describes security assumptions and known
+  limitations (e.g. side channels in Python); README with examples.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

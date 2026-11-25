@@ -10,7 +10,7 @@ def test_truncate_keeps_head_and_tail():
     out = truncate(text, 15000)
     assert len(out) <= 15000
     assert out.startswith("A" * 100) and out.endswith("B" * 100)
-    assert "gekürzt" in out and "MITTE" not in out
+    assert "truncated" in out and "MITTE" not in out
     assert truncate("kurz", 15000) == "kurz"
 
 

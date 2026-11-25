@@ -122,7 +122,7 @@ def test_tool_loop_writes_and_reads_files(cfg, sleeps):
     a = make_agent(cfg, client, sleeps)
     assert a.run()["outcome"] == "finished"
     tool_msgs = [m for m in client.requests[-1]["messages"] if m["role"] == "tool"]
-    assert "Bytes" in tool_msgs[0]["content"]
+    assert "bytes" in tool_msgs[0]["content"]
     assert tool_msgs[1]["content"] == "hallo"
     assert "a.txt" in tool_msgs[2]["content"]
     assert "exit_code=0" in tool_msgs[3]["content"] and "hallook" in tool_msgs[3]["content"]
@@ -159,7 +159,7 @@ def test_invalid_json_arguments(cfg, sleeps):
     client = FakeClient([resp(calls=[("bash", "{kaputt")]), finish()])
     make_agent(cfg, client, sleeps).run()
     tool_msg = [m for m in client.requests[1]["messages"] if m["role"] == "tool"][0]
-    assert "ungültige JSON" in tool_msg["content"]
+    assert "invalid JSON" in tool_msg["content"]
 
 
 def test_tool_output_truncated(cfg, sleeps):
@@ -167,7 +167,7 @@ def test_tool_output_truncated(cfg, sleeps):
     make_agent(cfg, client, sleeps).run()
     tool_msg = [m for m in client.requests[1]["messages"] if m["role"] == "tool"][0]
     assert len(tool_msg["content"]) <= 15000
-    assert "gekürzt" in tool_msg["content"]
+    assert "truncated" in tool_msg["content"]
 
 
 def test_bash_timeout(cfg, sleeps):
@@ -185,8 +185,8 @@ def test_path_guard_in_tools(cfg, sleeps, tmp_path):
                          finish()])
     make_agent(cfg, client, sleeps).run()
     tool_msgs = [m for m in client.requests[-1]["messages"] if m["role"] == "tool"]
-    assert "verweigert" in tool_msgs[0]["content"]
-    assert "verweigert" in tool_msgs[1]["content"]
+    assert "Access denied" in tool_msgs[0]["content"]
+    assert "Access denied" in tool_msgs[1]["content"]
     assert not (tmp_path / "geheim2.txt").exists()
 
 
@@ -233,10 +233,10 @@ def test_compression_at_threshold(cfg, sleeps):
     assert a.run()["outcome"] == "finished"
     assert a.stats["compressions"] == 1
     # Zusammenfassungs-Anfrage enthält den Verlauf + Aufforderung
-    assert "KONTEXT-KOMPRIMIERUNG" in client.requests[1]["messages"][-1]["content"]
+    assert "CONTEXT COMPRESSION" in client.requests[1]["messages"][-1]["content"]
     new = client.requests[2]["messages"]
     assert len(new) == 3
-    assert new[1]["content"].startswith("# Aufgabe: Testaufgabe")
+    assert new[1]["content"].startswith("# Task: Testaufgabe")
     body = new[2]["content"]
     assert "Lexer fertig, Parser offen" in body
     assert "- [ ] Parser" in body          # PROGRESS.md neu eingelesen
@@ -254,7 +254,7 @@ def test_compression_fallback_when_summary_too_long(cfg, sleeps):
     assert a.run()["outcome"] == "finished"
     fallback = client.requests[2]
     assert "tools" not in fallback
-    assert "Verlauf (gekürzt)" in fallback["messages"][1]["content"]
+    assert "History (abridged)" in fallback["messages"][1]["content"]
 
 
 # ------------------------------------------------------------ Fortsetzen / finish
@@ -266,7 +266,7 @@ def test_resume_reads_progress(cfg, sleeps):
     client = FakeClient([finish()])
     make_agent(cfg, client, sleeps, resume=True).run()
     first = client.requests[0]["messages"]
-    assert "FORTSETZUNG" in first[2]["content"]
+    assert "RESUMING" in first[2]["content"]
     assert "Schritt 2" in first[2]["content"]
 
 
@@ -281,7 +281,7 @@ def test_finish_rejected_when_tests_fail(cfg, sleeps):
     assert out["outcome"] == "finished"
     assert a.stats["finish_rejections"] == 1
     rejected = [m for m in client.requests[2]["messages"] if m["role"] == "tool"][-1]
-    assert "ABGELEHNT" in rejected["content"]
+    assert "REJECTED" in rejected["content"]
     assert len(client.requests) == 4
 
 
@@ -342,7 +342,7 @@ def test_truncated_tool_call_gets_split_hint(cfg, sleeps):
     assert last["role"] == "user" and "8192" in last["content"]
     assert "append=true" in last["content"]
     assert not os.path.exists(os.path.join(a.workspace, "big.py"))   # nicht ausgeführt
-    assert "8192 Tokens begrenzt" in client.requests[0]["messages"][0]["content"]
+    assert "limited to 8192 tokens" in client.requests[0]["messages"][0]["content"]
 
 
 def test_write_file_append(cfg, sleeps):
@@ -353,4 +353,4 @@ def test_write_file_append(cfg, sleeps):
     a.run()
     assert open(os.path.join(a.workspace, "m.py")).read() == "teil1\nteil2\n"
     res = [m["content"] for m in client.requests[-1]["messages"] if m["role"] == "tool"]
-    assert "angehängt" in res[1]
+    assert "appended" in res[1]

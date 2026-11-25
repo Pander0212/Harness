@@ -95,7 +95,7 @@ def test_required_sandbox_blocks_bash(tmp_path, monkeypatch):
     monkeypatch.setattr(sandbox, "IS_WINDOWS", False)
     r = sandbox.BashRunner(str(tmp_path), [str(tmp_path)], mode="auto", require=True)
     code, out, _ = r.run("echo hallo > x.txt")
-    assert code == 126 and "deaktiviert" in out
+    assert code == 126 and "disabled" in out
     assert not (tmp_path / "x.txt").exists()
 
 

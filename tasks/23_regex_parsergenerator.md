@@ -1,50 +1,50 @@
 ---
 topic: parser
+legacy_title: Regex-Engine, Lexer-Generator und LALR(1)-Parser-Generator
 ---
-# Regex-Engine, Lexer-Generator und LALR(1)-Parser-Generator
+# Regex Engine, Lexer Generator and LALR(1) Parser Generator
 
-## Ziel
-Entwickle in reinem Python 3 – ohne das Modul `re` (nur in Tests als Referenz) – eine
-Regex-Engine mit mehreren Ausführungsstrategien sowie einen Lexer- und einen
-LALR(1)-Parser-Generator (konzeptionell wie lex/yacc), die zusammen Parser für echte
-Sprachen erzeugen. Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 – without the `re` module (allowed only in tests as a reference) –
+a regex engine with several execution strategies as well as a lexer generator and an
+LALR(1) parser generator (conceptually like lex/yacc) that together produce parsers for
+real languages. Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Regex-Parser**: Literale, Escapes, Zeichenklassen (inkl. Bereiche, Negation,
-   `\d\w\s` und Unicode-Kategorien über `unicodedata`), Quantoren (`* + ? {m,n}`,
-   gierig und genügsam), Gruppen (einfangend, nicht einfangend, benannt), Alternation,
-   Anker (`^ $ \b \B \A \z`), Flags (i, m, s, x).
-2. **Ausführung**: Thompson-NFA-Simulation (lineare Zeit), **lazy DFA** mit Cache,
-   **DFA-Minimierung** (Hopcroft), Backtracking-Engine für Rückreferenzen und
-   Lookahead/Lookbehind; automatische Wahl der Strategie; Capture-Gruppen auch im
-   NFA-Modus (Pike-VM).
-3. **API** ähnlich `re`: `compile`, `match`, `fullmatch`, `search`, `findall`,
-   `finditer`, `sub` (mit Gruppenreferenzen und Funktion), `split`.
-4. **Lexer-Generator**: Spezifikation von Token per Regex mit Prioritäten,
-   längster Treffer, Zustände (z. B. für Strings/Kommentare), Erzeugung einer
-   Tabellen-DFA, Fehlerbehandlung mit Positionen; Codegenerierung als
-   eigenständiges Python-Modul.
-5. **Parser-Generator**: Grammatik-DSL mit Aktionen, FIRST/FOLLOW, LR(0)-Automat,
-   **LALR(1)-Lookaheads** (DeRemer-Pennello oder Propagation), Präzedenz- und
-   Assoziativitätsdeklarationen, Konfliktberichte mit Beispielen,
-   Fehlerbehandlung mit `error`-Token, Codegenerierung als Python-Modul; zusätzlich
-   ein LL(1)-Modus mit Konflikterkennung.
-6. **Beispielsprachen**, mit den Generatoren erzeugt: Taschenrechner mit Variablen,
-   JSON-Parser (voll konform), eine Teilmenge von C-Ausdrücken und Anweisungen mit AST,
-   ein INI/TOML-artiges Format.
+## Functional Requirements
+1. **Regex parser**: literals, escapes, character classes (including ranges, negation,
+   `\d\w\s` and Unicode categories via `unicodedata`), quantifiers (`* + ? {m,n}`, greedy
+   and lazy), groups (capturing, non-capturing, named), alternation, anchors
+   (`^ $ \b \B \A \z`), flags (i, m, s, x).
+2. **Execution**: Thompson NFA simulation (linear time), **lazy DFA** with a cache,
+   **DFA minimization** (Hopcroft), a backtracking engine for backreferences and
+   lookahead/lookbehind; automatic choice of strategy; capture groups also in NFA mode
+   (Pike VM).
+3. **API** similar to `re`: `compile`, `match`, `fullmatch`, `search`, `findall`,
+   `finditer`, `sub` (with group references and a function), `split`.
+4. **Lexer generator**: token specification via regexes with priorities, longest match,
+   states (e.g. for strings/comments), generation of a table DFA, error handling with
+   positions; code generation as a standalone Python module.
+5. **Parser generator**: grammar DSL with actions, FIRST/FOLLOW, LR(0) automaton,
+   **LALR(1) lookaheads** (DeRemer-Pennello or propagation), precedence and associativity
+   declarations, conflict reports with examples, error recovery with an `error` token,
+   code generation as a Python module; additionally an LL(1) mode with conflict
+   detection.
+6. **Example languages** generated with the tools: a calculator with variables, a JSON
+   parser (fully compliant), a subset of C expressions and statements with an AST, an
+   INI/TOML-like format.
 
-## Teststrategie (pytest)
-- Differenztests gegen `re`: 3000 zufällig generierte Muster/Eingabe-Paare (fester
-  Seed) für `match`, `search`, Gruppen und `sub` im gemeinsamen Funktionsumfang.
-- Pathologische Muster (`(a*)*b` auf langen Eingaben) laufen im NFA/DFA-Modus in
-  linearer Zeit (Zeitlimit-Test).
-- DFA-Minimierung: Minimal-DFA gleicher Sprache für bekannte Fälle (Zustandszahlen).
-- Parser-Generator: klassische Grammatiken aus dem Drachenbuch mit erwarteten
-  Tabellen/Konflikten; erzeugter JSON-Parser gegen `json` auf 500 Zufallsdokumenten.
-- Mindestens 300 Testfälle.
+## Test Strategy (pytest)
+- Differential tests against `re`: 3000 randomly generated pattern/input pairs (fixed
+  seed) for `match`, `search`, groups and `sub` within the common feature set.
+- Pathological patterns (`(a*)*b` on long inputs) run in linear time in NFA/DFA mode
+  (time-limit test).
+- DFA minimization: minimal DFA of the same language for known cases (state counts).
+- Parser generator: classic grammars from the Dragon Book with expected tables/conflicts;
+  the generated JSON parser against `json` on 500 random documents.
+- At least 300 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Algorithmen in DESIGN.md, Benutzerhandbuch in docs/.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; algorithms in DESIGN.md, user manual in docs/.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

@@ -1,56 +1,55 @@
 ---
 topic: distributed
 spec_docs: false
+legacy_title: Raft-Konsens und linearisierbarer Key-Value-Store mit Fehlerinjektion
 ---
-# Raft-Konsens und linearisierbarer Key-Value-Store mit Fehlerinjektion
+# Raft Consensus and a Linearizable Key-Value Store with Fault Injection
 
-## Ziel
-Implementiere in reinem Python 3 (nur Standardbibliothek) einen replizierten
-Key-Value-Store auf Basis des Raft-Konsensprotokolls und beweise seine Korrektheit mit
-einem Jepsen-artigen Testframework: deterministische Simulation, Fehlerinjektion und ein
-Linearisierbarkeits-Checker. Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Implement, in pure Python 3 (standard library only), a replicated key-value store based on
+the Raft consensus protocol and prove its correctness with a Jepsen-style test framework:
+deterministic simulation, fault injection and a linearizability checker. Scope: at least
+8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Deterministischer Simulator**: virtuelle Uhr, Nachrichtennetz mit Verzögerung,
-   Verlust, Duplikaten, Umordnung, Netzwerkpartitionen (beliebige Teilmengen,
-   asymmetrisch), Knotenabstürze mit Verlust des flüchtigen Zustands, Neustarts,
-   Uhren-Drift. Jeder Lauf ist per Seed reproduzierbar.
-2. **Raft** vollständig nach dem Paper (Extended Version): Leader-Wahl mit
-   randomisierten Timeouts, Log-Replikation, Commit-Regel (nur Einträge des aktuellen
-   Terms direkt), persistenter Zustand (currentTerm, votedFor, Log) über eine simulierte
-   Platte mit fsync-Semantik, PreVote, CheckQuorum, Leader-Lease für Lesezugriffe,
-   ReadIndex für linearisierbare Reads.
-3. **Log-Kompaktierung**: Snapshots, InstallSnapshot-RPC in Chunks, Wiederanlauf aus
-   Snapshot + Log.
-4. **Mitgliedschaftsänderungen**: Joint Consensus (oder Single-Server-Changes mit
-   korrekter Behandlung), Learner-Knoten, Leader-Transfer.
-5. **Key-Value-Store** als Zustandsmaschine: `get`, `put`, `delete`, `cas`
-   (compare-and-swap), Transaktionen über mehrere Schlüssel, Client-Sessions mit
-   Request-IDs zur Deduplizierung (exactly-once Semantik).
-6. **Client-Bibliothek** mit Leader-Erkennung, Redirects, Timeouts und Wiederholungen.
-7. **Linearisierbarkeits-Checker** (Wing-Gong/Knossos-Prinzip mit Memoisierung) für
-   Historien aus Aufrufen und Antworten inklusive unbestimmter Ergebnisse (Timeouts).
-8. **Nemesis-Szenarien**: zufällige Partitionen, Leader isolieren, Mehrheit/Minderheit
-   trennen, Abstürze während Snapshot-Übertragung, Uhrensprünge.
-9. **Visualisierung**: Textausgabe der Zeitleiste (wer war wann Leader, Terms, Commits).
+## Functional Requirements
+1. **Deterministic simulator**: virtual clock, message network with delay, loss,
+   duplicates, reordering, network partitions (arbitrary subsets, asymmetric), node
+   crashes with loss of volatile state, restarts, clock drift. Every run is reproducible
+   via a seed.
+2. **Raft** fully per the paper (extended version): leader election with randomized
+   timeouts, log replication, commit rule (only entries of the current term directly),
+   persistent state (currentTerm, votedFor, log) on a simulated disk with fsync
+   semantics, PreVote, CheckQuorum, leader lease for reads, ReadIndex for linearizable
+   reads.
+3. **Log compaction**: snapshots, InstallSnapshot RPC in chunks, restart from snapshot +
+   log.
+4. **Membership changes**: joint consensus (or single-server changes with correct
+   handling), learner nodes, leader transfer.
+5. **Key-value store** as the state machine: `get`, `put`, `delete`, `cas`
+   (compare-and-swap), transactions over several keys, client sessions with request IDs
+   for deduplication (exactly-once semantics).
+6. **Client library** with leader discovery, redirects, timeouts and retries.
+7. **Linearizability checker** (Wing-Gong/Knossos principle with memoization) for
+   histories of invocations and responses, including indeterminate results (timeouts).
+8. **Nemesis scenarios**: random partitions, isolate the leader, split majority/minority,
+   crashes during snapshot transfer, clock jumps.
+9. **Visualization**: text output of the timeline (who was leader when, terms, commits).
 
-## Teststrategie (pytest)
-- Unit-Tests für jede RPC-Regel (Abbildung 2 des Raft-Papers Punkt für Punkt).
-- Sicherheitseigenschaften als Invarianten nach jedem Simulationsschritt geprüft:
-  Election Safety, Leader Append-Only, Log Matching, Leader Completeness,
-  State Machine Safety.
-- Mindestens 200 randomisierte Simulationsläufe (feste Seeds) mit Nemesis und
-  Linearisierbarkeitsprüfung der gesamten Historie.
-- Checker selbst mit bekannten linearisierbaren und nicht linearisierbaren Historien
-  testen (mindestens 30 Fälle).
-- Liveness: nach Ende aller Störungen wird innerhalb begrenzter Zeit ein Leader gewählt
-  und alle Anfragen werden beantwortet.
-- Mindestens 250 Testfälle.
+## Test Strategy (pytest)
+- Unit tests for every RPC rule (Figure 2 of the Raft paper point by point).
+- Safety properties checked as invariants after every simulation step: Election Safety,
+  Leader Append-Only, Log Matching, Leader Completeness, State Machine Safety.
+- At least 200 randomized simulation runs (fixed seeds) with nemesis and a
+  linearizability check of the entire history.
+- Test the checker itself with known linearizable and non-linearizable histories (at
+  least 30 cases).
+- Liveness: after all disturbances end, a leader is elected within bounded time and all
+  requests are answered.
+- At least 250 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; DESIGN.md erklärt alle Designentscheidungen; ein
-  Bericht in `docs/RESULTS.md` fasst Simulationsläufe und gefundene/behobene Fehler
-  zusammen.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; DESIGN.md explains all design decisions; a report in
+  `docs/RESULTS.md` summarizes simulation runs and bugs found/fixed.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

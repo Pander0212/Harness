@@ -1,50 +1,49 @@
 ---
 topic: network
 mode: swarm
+legacy_title: Persistenter Message-Broker mit MQTT-3.1.1-Protokoll und Clustering
 ---
-# Persistenter Message-Broker mit MQTT-3.1.1-Protokoll und Clustering
+# Persistent Message Broker with the MQTT 3.1.1 Protocol and Clustering
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek, `asyncio` erlaubt) einen
-Message-Broker, der das **MQTT-3.1.1-Protokoll** byte-genau spricht (echte MQTT-Clients
-sollen sich verbinden können), Nachrichten dauerhaft speichert und in einem Cluster aus
-mehreren Knoten Nachrichten weiterleitet. Gedacht für den **Schwarm-Modus**. Umfang:
-mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only, `asyncio` allowed), a message broker that
+speaks the **MQTT 3.1.1 protocol** byte-exactly (real MQTT clients should be able to
+connect), stores messages durably and forwards messages within a cluster of several nodes.
+Meant for **swarm mode**. Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Protokoll**: Kodierung/Dekodierung aller Pakettypen (CONNECT, CONNACK, PUBLISH,
+## Functional Requirements
+1. **Protocol**: encoding/decoding of all packet types (CONNECT, CONNACK, PUBLISH,
    PUBACK, PUBREC, PUBREL, PUBCOMP, SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK, PINGREQ,
-   PINGRESP, DISCONNECT), variable Längenkodierung, strikte Validierung mit
-   Verbindungsabbruch bei Protokollverletzungen.
-2. **Sitzungen**: Clean Session und persistente Sitzungen, Client-ID-Übernahme,
-   Keep-Alive mit Timeout (1,5×), Last Will and Testament, Benutzername/Passwort
-   (Passwortdatei mit gesalzenen Hashes).
-3. **QoS 0/1/2** mit vollständigem Zustandsautomaten, Paket-IDs, Wiederholung nach
-   Wiederverbindung, Inflight-Fenster, Warteschlangenlimits.
-4. **Topics**: Topic-Baum mit Wildcards `+` und `#`, `$SYS`-Topics mit Statistiken,
-   **Retained Messages**, Zugriffssteuerung (ACL-Datei pro Benutzer und Muster).
-5. **Persistenz**: Append-only-Log mit Segmenten für Nachrichten und Sitzungszustand,
-   Wiederherstellung nach Absturz, Kompaktierung.
-6. **Clustering**: mehrere Broker-Knoten tauschen Abonnements per Gossip aus und
-   leiten Nachrichten weiter; Schleifenvermeidung; Knotenausfall und -rückkehr.
-7. **Bridge** zu einem zweiten Broker und **Client-Bibliothek** (synchron und asyncio)
-   mit automatischer Wiederverbindung.
-8. **Werkzeuge**: `pub`/`sub`-Kommandozeilenclients, Lastgenerator, Statistik-Ausgabe.
+   PINGRESP, DISCONNECT), variable-length encoding, strict validation with disconnection
+   on protocol violations.
+2. **Sessions**: clean sessions and persistent sessions, client ID takeover, keep-alive
+   with timeout (1.5×), last will and testament, username/password (password file with
+   salted hashes).
+3. **QoS 0/1/2** with complete state machines, packet IDs, redelivery after reconnect,
+   inflight window, queue limits.
+4. **Topics**: topic tree with the wildcards `+` and `#`, `$SYS` topics with statistics,
+   **retained messages**, access control (ACL file per user and pattern).
+5. **Persistence**: append-only log with segments for messages and session state,
+   recovery after a crash, compaction.
+6. **Clustering**: several broker nodes exchange subscriptions via gossip and forward
+   messages; loop avoidance; node failure and return.
+7. **Bridge** to a second broker and a **client library** (synchronous and asyncio) with
+   automatic reconnect.
+8. **Tools**: `pub`/`sub` command-line clients, a load generator, statistics output.
 
-## Teststrategie (pytest)
-- Paket-Kodierungstests mit Byte-Folgen aus der Spezifikation; Fuzzing des Decoders
-  (5000 zufällige Bytefolgen dürfen den Broker nicht zum Absturz bringen).
-- Konformitätstests pro Normative Statement der Spezifikation (MQTT-x.x.x-y), so weit
-  sinnvoll – mindestens 100 Stück.
-- QoS-2-Garantie: genau-einmal-Zustellung trotz Verbindungsabbrüchen an jeder Stelle
-  des Handshakes.
-- Cluster-Tests mit 3 Knoten im selben Prozess; Absturz und Wiederanlauf mit Persistenz.
-- Lasttest: 100 Clients, 50.000 Nachrichten, keine Verluste bei QoS 1/2; Durchsatz
-  dokumentieren.
-- Mindestens 300 Testfälle.
+## Test Strategy (pytest)
+- Packet encoding tests with byte sequences from the specification; fuzzing of the
+  decoder (5000 random byte sequences must not crash the broker).
+- Conformance tests per normative statement of the specification (MQTT-x.x.x-y) where
+  sensible – at least 100 of them.
+- QoS 2 guarantee: exactly-once delivery despite connection drops at every point of the
+  handshake.
+- Cluster tests with 3 nodes in the same process; crash and restart with persistence.
+- Load test: 100 clients, 50,000 messages, no losses with QoS 1/2; document throughput.
+- At least 300 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Architektur und Speicherformat in DESIGN.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; architecture and storage format in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

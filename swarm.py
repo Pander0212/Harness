@@ -15,31 +15,31 @@ STAT_MERGE_KEYS = ("prompt_tokens", "cached_tokens", "completion_tokens", "calls
                    "compressions", "cost_usd", "tool_calls", "green_suites", "subagents",
                    "overload_waits")
 
-_SCOPE_DESC = ("Liste von Pfaden (relativ zum Workspace), in die dieser Subagent schreiben "
-               "darf, z. B. [\"src/parser/\", \"tests/test_parser.py\"]. Leer = ganzer Workspace.")
+_SCOPE_DESC = ("List of paths (relative to the workspace) this subagent may write to, "
+               "e.g. [\"src/parser/\", \"tests/test_parser.py\"]. Empty = entire workspace.")
 
 SUBAGENT_TOOLS = [
     {"type": "function", "function": {
         "name": "subagent",
-        "description": "Delegiert eine klar abgegrenzte Teilaufgabe an einen Subagenten mit "
-                       "eigenem, frischem Kontext (z. B. Modul implementieren und testen, "
-                       "Fehlerursache untersuchen, Testsuite für ein Modul schreiben, Code-Review). "
-                       "Der Subagent sieht deinen Verlauf NICHT – gib ihm alle nötigen Details. "
-                       "Blockiert, bis er fertig ist, und liefert seinen Bericht zurück.",
+        "description": "Delegates a clearly bounded subtask to a subagent with its own fresh "
+                       "context (e.g. implement and test a module, investigate the cause of "
+                       "a bug, write a test suite for a module, code review). The subagent "
+                       "does NOT see your history – give it every necessary detail. Blocks "
+                       "until it is done and returns its report.",
         "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "Kurzer Name, z. B. 'parser-tests'"},
+            "name": {"type": "string", "description": "Short name, e.g. 'parser-tests'"},
             "instructions": {"type": "string",
-                             "description": "Ausführlicher Arbeitsauftrag inkl. Kontext, "
-                                            "Schnittstellen, Akzeptanzkriterien"},
+                             "description": "Detailed assignment including context, "
+                                            "interfaces and acceptance criteria"},
             "scope": {"type": "array", "items": {"type": "string"}, "description": _SCOPE_DESC}},
             "required": ["name", "instructions"]}}},
     {"type": "function", "function": {
         "name": "swarm",
-        "description": "Startet einen Schwarm: mehrere Subagenten arbeiten PARALLEL an "
-                       "unabhängigen Arbeitspaketen im selben Workspace. Jedes Paket braucht "
-                       "einen eigenen, überschneidungsfreien Schreibbereich (scope). Blockiert, "
-                       "bis alle fertig sind, und liefert alle Berichte. Danach integrierst du "
-                       "die Ergebnisse und lässt die gesamte Testsuite laufen.",
+        "description": "Starts a swarm: several subagents work IN PARALLEL on independent "
+                       "work packages in the same workspace. Every package needs its own, "
+                       "non-overlapping write scope. Blocks until all are done and returns "
+                       "all reports. Afterwards you integrate the results and run the entire "
+                       "test suite.",
         "parameters": {"type": "object", "properties": {
             "tasks": {"type": "array", "items": {"type": "object", "properties": {
                 "name": {"type": "string"},
@@ -51,54 +51,54 @@ SUBAGENT_TOOLS = [
 ]
 
 SUBAGENT_PROMPT_SECTION = """
-SUBAGENTEN UND SCHWARM
-- Mit `subagent` delegierst du eine abgegrenzte Teilaufgabe an einen Agenten mit frischem
-  Kontext; mit `swarm` lässt du bis zu {max_sub} Arbeitspakete parallel bearbeiten.
-- Sinnvoll für unabhängige Module, umfangreiche Testsuiten, Fehlersuche, Reviews. Nicht für
-  Kleinigkeiten, die du selbst schneller erledigst.
-- Subagenten sehen deinen Verlauf nicht: Gib Ziel, Schnittstellen (Signaturen, Datenformate),
-  relevante Dateien, Teststrategie und Akzeptanzkriterien vollständig an.
-- Jedes Schwarm-Paket bekommt einen eigenen, überschneidungsfreien Schreibbereich (scope).
-  Lege gemeinsame Schnittstellen VORHER in DESIGN.md bzw. im Code fest.
-- Prüfe die Berichte kritisch, lies die geänderten Dateien, integriere und führe danach die
-  gesamte Testsuite aus. Vermerke delegierte Pakete und Ergebnisse in PROGRESS.md.
+SUBAGENTS AND SWARM
+- With `subagent` you delegate a bounded subtask to an agent with a fresh context; with
+  `swarm` up to {max_sub} work packages are processed in parallel.
+- Useful for independent modules, large test suites, debugging, reviews. Not for small
+  things you can do faster yourself.
+- Subagents do not see your history: give the goal, interfaces (signatures, data formats),
+  relevant files, test strategy and acceptance criteria completely.
+- Every swarm package gets its own, non-overlapping write scope. Define shared interfaces
+  BEFOREHAND in DESIGN.md or in code.
+- Review the reports critically, read the changed files, integrate and then run the entire
+  test suite. Record delegated packages and results in PROGRESS.md.
 """
 
 COORDINATOR_SECTION = """
-ROLLE: SCHWARM-KOORDINATOR
-Du leitest einen Schwarm von Subagenten. Vorgehen:
-1. Analysiere die Aufgabe, entwirf die Architektur in DESIGN.md mit klaren Modulgrenzen und
-   Schnittstellen und lege das Projektgerüst an (Pakete, Stubs, gemeinsame Typen).
-2. Schreibe PLAN.md: Arbeitspakete mit Abhängigkeiten, Scope (Dateien) und Akzeptanzkriterien.
-3. Starte unabhängige Pakete mit `swarm` parallel; abhängige Pakete in späteren Wellen.
-4. Nach jeder Welle: Berichte prüfen, Code lesen, Integrationstests schreiben, gesamte
-   Testsuite ausführen, Fehler selbst beheben oder gezielt per `subagent` beheben lassen.
-5. Halte PROGRESS.md aktuell (Wellen, Pakete, Status). `finish` erst, wenn alles integriert
-   und die gesamte Testsuite grün ist.
+ROLE: SWARM COORDINATOR
+You lead a swarm of subagents. Procedure:
+1. Analyze the task, design the architecture in DESIGN.md with clear module boundaries and
+   interfaces, and create the project skeleton (packages, stubs, shared types).
+2. Write PLAN.md: work packages with dependencies, scope (files) and acceptance criteria.
+3. Start independent packages in parallel with `swarm`; dependent packages in later waves.
+4. After each wave: review the reports, read the code, write integration tests, run the
+   entire test suite, fix errors yourself or have them fixed specifically via `subagent`.
+5. Keep PROGRESS.md up to date (waves, packages, status). Call `finish` only when everything
+   is integrated and the entire test suite passes.
 """
 
-SUB_SYSTEM_PROMPT = """Du bist ein Subagent in einem autonomen Entwicklerteam. Ein \
-Hauptagent hat dir ein Arbeitspaket aus einem größeren Projekt übertragen. Niemand \
-beantwortet Rückfragen – entscheide selbst und dokumentiere Annahmen im Bericht.
+SUB_SYSTEM_PROMPT = """You are a subagent in an autonomous development team. A lead agent \
+has assigned you a work package from a larger project. Nobody will answer questions – \
+decide yourself and document assumptions in your report.
 
-UMGEBUNG
-- Gemeinsamer Workspace: {workspace} (andere Subagenten arbeiten evtl. gleichzeitig darin).
-- Dein Schreibbereich (scope): {scope}
-  Ändere ausschließlich Dateien in diesem Bereich (write_file erzwingt das; halte dich auch
-  bei bash daran). Andere Dateien darfst du lesen.
-- Werkzeuge: bash, read_file, write_file (mit append=true zum Anhängen), list_dir, finish.
-  Tool-Ausgaben werden auf {limit} Zeichen gekürzt. Zeitbudget: {max_hours} Stunden.
-- Deine Antworten sind auf {max_out} Tokens begrenzt: große Dateien in Teilen schreiben
-  (write_file, dann write_file mit append=true, je höchstens ca. 300 Zeilen).
+ENVIRONMENT
+- Shared workspace: {workspace} (other subagents may be working in it at the same time).
+- Your write scope: {scope}
+  Change only files inside this scope (write_file enforces it; respect it with bash as
+  well). You may read other files.
+- Tools: bash, read_file, write_file (append=true to append), list_dir, finish.
+  Tool output is truncated to {limit} characters. Time budget: {max_hours} hours.
+- Your responses are limited to {max_out} tokens: write large files in parts
+  (write_file, then write_file with append=true, at most ~300 lines each).
 
-ARBEITSWEISE
-1. Lies zuerst die relevanten Dateien (DESIGN.md, Schnittstellen, bestehender Code).
-2. Test-driven: Tests zu deinem Paket schreiben, nach jedem Schritt ausführen (gezielt deine
-   Tests, z. B. `python3 -m pytest -q tests/test_xyz.py`).
-3. Bei dreimaligem Scheitern am selben Fehler den Ansatz wechseln.
-4. Rufe `finish` auf, wenn dein Paket fertig ist und deine Tests grün sind. Der `summary`
-   ist dein Bericht an den Hauptagenten: was umgesetzt wurde, Dateien, Schnittstellen,
-   Teststand (Zahlen), Annahmen, offene Probleme.
+WORKING RULES
+1. First read the relevant files (DESIGN.md, interfaces, existing code).
+2. Test-driven: write tests for your package and run them after every step (specifically
+   your tests, e.g. `python3 -m pytest -q tests/test_xyz.py`).
+3. If the same error fails three times, change your approach.
+4. Call `finish` when your package is done and your tests pass. The `summary` is your
+   report to the lead agent: what was implemented, files, interfaces, test status
+   (numbers), assumptions, open problems.
 """
 
 
@@ -115,7 +115,7 @@ def _norm_scope(agent, scope):
             continue
         real = agent.guard.resolve(p)
         if not (real == agent.workspace or real.startswith(agent.workspace + os.sep)):
-            raise ValueError(f"Scope '{p}' liegt außerhalb des Workspace")
+            raise ValueError(f"scope '{p}' is outside the workspace")
         out.append(real)
     return out
 
@@ -219,13 +219,13 @@ class SubagentManager:
                         acquired = True
                         break
                 if not acquired:
-                    results[nm] = {"outcome": "stopped", "message": "gestoppt"}
+                    results[nm] = {"outcome": "stopped", "message": "stopped"}
                     return
                 with self.lock:
                     self.children[nm] = child
                 results[nm] = child.run()
             except Exception as e:  # pragma: no cover
-                results[nm] = {"outcome": "error", "message": f"Interner Fehler: {e}"}
+                results[nm] = {"outcome": "error", "message": f"internal error: {e}"}
             finally:
                 if acquired:
                     a.sub_semaphore.release()
@@ -247,7 +247,7 @@ class SubagentManager:
                 if k == "subagents":
                     continue
                 a.stats[k] += child.stats.get(k, 0) or 0
-            res = results.get(nm, {"outcome": "error", "message": "kein Ergebnis"})
+            res = results.get(nm, {"outcome": "error", "message": "no result"})
             res = dict(res, name=nm, stats=dict(child.stats), last_text=child.last_text)
             out.append(res)
         changed, deleted = _changed_files(a.workspace, before)
@@ -262,20 +262,20 @@ class SubagentManager:
             s = r["stats"]
             body = r.get("message") or ""
             if r["outcome"] == "no_tool" and r.get("last_text"):
-                body += "\nLetzte Nachricht: " + r["last_text"]
+                body += "\nLast message: " + r["last_text"]
             parts.append(
                 f"## Subagent '{r['name']}': {r['outcome']}\n"
                 f"Calls: {s.get('calls', 0)}, Tool-Calls: {s.get('tool_calls', 0)}, "
                 f"Tokens: {s.get('prompt_tokens', 0) + s.get('completion_tokens', 0)}\n"
-                f"Bericht:\n{truncate(body, per)}")
-        files = "\n".join(changed[:150]) or "(keine)"
+                f"Report:\n{truncate(body, per)}")
+        files = "\n".join(changed[:150]) or "(none)"
         if len(changed) > 150:
-            files += f"\n... und {len(changed) - 150} weitere"
-        txt = "\n\n".join(parts) + f"\n\n## Geänderte Dateien im Workspace\n{files}"
+            files += f"\n... and {len(changed) - 150} more"
+        txt = "\n\n".join(parts) + f"\n\n## Changed files in the workspace\n{files}"
         if deleted:
-            txt += "\n\n## Gelöschte Dateien\n" + "\n".join(deleted[:50])
-        txt += ("\n\nPrüfe die Ergebnisse (Dateien lesen, gesamte Testsuite ausführen) und "
-                "aktualisiere PROGRESS.md.")
+            txt += "\n\n## Deleted files\n" + "\n".join(deleted[:50])
+        txt += ("\n\nReview the results (read the files, run the entire test suite) and "
+                "update PROGRESS.md.")
         return txt
 
     def _check_auth(self, results):
@@ -288,11 +288,11 @@ class SubagentManager:
         name = str(args.get("name") or "subagent")
         instr = args.get("instructions")
         if not isinstance(instr, str) or len(instr.strip()) < 20:
-            return "Fehler: 'instructions' fehlt oder ist zu knapp (ausführlich beschreiben)."
+            return "Error: 'instructions' is missing or too short (describe the assignment in detail)."
         try:
             scope = _norm_scope(self.agent, args.get("scope"))
         except Exception as e:
-            return f"Fehler im scope: {e}"
+            return f"Error in scope: {e}"
         results, changed, deleted = self.run_batch([(name, instr, scope)])
         self._check_auth(results)
         return self.format_report(results, changed, deleted)
@@ -301,34 +301,34 @@ class SubagentManager:
         tasks = args.get("tasks")
         max_sub = int(self.agent.cfg["max_subagents"])
         if not isinstance(tasks, list) or not tasks:
-            return "Fehler: 'tasks' muss eine nicht-leere Liste sein."
+            return "Error: 'tasks' must be a non-empty list."
         if len(tasks) > max_sub:
-            return (f"Fehler: höchstens {max_sub} Arbeitspakete pro Schwarm "
-                    f"({len(tasks)} angegeben). Teile in Wellen auf.")
+            return (f"Error: at most {max_sub} work packages per swarm "
+                    f"({len(tasks)} given). Split them into waves.")
         specs = []
         for i, t in enumerate(tasks):
             if not isinstance(t, dict):
-                return f"Fehler: Paket {i + 1} ist kein Objekt."
+                return f"Error: package {i + 1} is not an object."
             instr = t.get("instructions")
             if not isinstance(instr, str) or len(instr.strip()) < 20:
-                return f"Fehler: Paket {i + 1} hat keine ausführlichen 'instructions'."
+                return f"Error: package {i + 1} has no detailed 'instructions'."
             try:
                 scope = _norm_scope(self.agent, t.get("scope"))
             except Exception as e:
-                return f"Fehler im scope von Paket {i + 1}: {e}"
+                return f"Error in the scope of package {i + 1}: {e}"
             if not scope and len(tasks) > 1:
-                return (f"Fehler: Paket {i + 1} ('{t.get('name')}') hat keinen scope. Im Schwarm "
-                        "braucht jedes Paket einen eigenen Schreibbereich.")
-            specs.append((str(t.get("name") or f"paket-{i + 1}"), instr, scope))
+                return (f"Error: package {i + 1} ('{t.get('name')}') has no scope. In a swarm "
+                        "every package needs its own write scope.")
+            specs.append((str(t.get("name") or f"package-{i + 1}"), instr, scope))
         for i in range(len(specs)):
             for j in range(i + 1, len(specs)):
                 if scopes_overlap(specs[i][2], specs[j][2]):
-                    return (f"Fehler: Die Schreibbereiche von '{specs[i][0]}' und "
-                            f"'{specs[j][0]}' überschneiden sich. Bitte disjunkt aufteilen.")
+                    return (f"Error: the write scopes of '{specs[i][0]}' and "
+                            f"'{specs[j][0]}' overlap. Please split them disjointly.")
         t0 = time.time()
         results, changed, deleted = self.run_batch(specs)
         self._check_auth(results)
-        head = (f"# Schwarm beendet: {len(results)} Pakete, "
-                f"{sum(1 for r in results if r['outcome'] == 'finished')} erfolgreich, "
-                f"Dauer {int(time.time() - t0)} s\n\n")
+        head = (f"# Swarm finished: {len(results)} packages, "
+                f"{sum(1 for r in results if r['outcome'] == 'finished')} successful, "
+                f"duration {int(time.time() - t0)} s\n\n")
         return head + self.format_report(results, changed, deleted)

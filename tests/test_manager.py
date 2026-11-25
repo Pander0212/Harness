@@ -8,7 +8,7 @@ from config import Config
 from fakes import FakeAPIError, FakeClient, resp, tool
 from manager import Manager
 
-GEN_TEXT = "TITEL: Raytracer mit BVH\n---\n" + " ".join(["Anforderung"] * 700) + " pytest"
+GEN_TEXT = "TITLE: Raytracer mit BVH\n---\n" + " ".join(["Anforderung"] * 700) + " pytest"
 
 
 def finish():
@@ -86,7 +86,7 @@ def test_abort_then_next_task_starts(cfg, tmp_path):
     wait_idle(m)
     assert m.tasks[a]["status"] in ("fertig", "schwach")
     first = client.requests[-1]["messages"]
-    assert any("FORTSETZUNG" in (x.get("content") or "") for x in first)
+    assert any("RESUMING" in (x.get("content") or "") for x in first)
 
 
 def test_auth_error_blocks_new_tasks(cfg, tmp_path):
@@ -199,7 +199,7 @@ def test_endless_mode_generates_new_task(cfg, tmp_path):
     assert t["title"] == "Raytracer mit BVH" and t["source"] == "generiert"
     assert t["status"] in ("fertig", "schwach")
     gen_req = [r for r in client.requests if "tools" not in r][0]
-    assert "BEREITS VORHANDENE PROJEKTE" in gen_req["messages"][1]["content"]
+    assert "EXISTING PROJECTS" in gen_req["messages"][1]["content"]
     assert m.totals()["calls"] >= 2
 
 
@@ -298,7 +298,7 @@ def test_generated_task_swarm_mode(cfg, tmp_path):
     wait_idle(m)
     t = next(iter(m.tasks.values()))
     assert t["mode"] == "swarm"
-    assert "SCHWARM-KOORDINATOR" in started[0]
+    assert "SWARM COORDINATOR" in started[0]
 
 
 def test_snapshot_shows_live_subagents(cfg, tmp_path):
@@ -309,7 +309,7 @@ def test_snapshot_shows_live_subagents(cfg, tmp_path):
     def brain(kw):
         sysmsg = kw["messages"][0]["content"]
         n = sum(1 for x in kw["messages"] if x["role"] == "tool")
-        if "Subagent in einem autonomen" in sysmsg:
+        if "You are a subagent" in sysmsg:
             if n == 0:
                 return tool("bash", command="true")
             go.wait(5)
@@ -408,3 +408,48 @@ def test_per_task_spec_docs_override(cfg, tmp_path):
     m.tick()
     wait_idle(m)
     assert os.path.exists(os.path.join(m.ws_dir, b, "docs", "SPEC.md"))
+
+
+def test_translated_builtin_tasks_replace_waiting_ones_only(cfg, tmp_path):
+    tdir = tmp_path / "tasks_tr"
+    tdir.mkdir()
+    (tdir / "1_a.md").write_text("# Alte Aufgabe A\nDeutscher Text A")
+    (tdir / "2_b.md").write_text("# Alte Aufgabe B: Teil\nDeutscher Text B")
+    m = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    a, b = m.queue
+    os.makedirs(os.path.join(m.ws_dir, b))          # B wurde bereits begonnen
+    st = json.load(open(m.state_path))
+    for t in st["tasks"].values():
+        t.pop("builtin_file", None)                  # Zustand einer älteren Version
+    del st["builtin_loaded"]
+    json.dump(st, open(m.state_path, "w"))
+    (tdir / "1_a.md").write_text("---\nlegacy_title: Alte Aufgabe A\n---\n# Task A\nEnglish A")
+    (tdir / "2_b.md").write_text('---\nlegacy_title: "Alte Aufgabe B: Teil"\n---\n'
+                                 "# Task B\nEnglish B")
+    m2 = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    assert len(m2.tasks) == 2                         # keine Duplikate
+    assert m2.tasks[a]["title"] == "Task A" and m2.get_prompt(a) == "English A"
+    assert m2.tasks[b]["title"] == "Alte Aufgabe B: Teil"   # begonnen -> unverändert
+    assert m2.get_prompt(b) == "Deutscher Text B"
+
+
+def test_model_facing_prompts_are_english(cfg, tmp_path):
+    import re as _re
+    import agent as agent_mod
+    import generator as gen_mod
+    import swarm as swarm_mod
+    german = _re.compile(r"[äöüÄÖÜß]|\b(und|der|die|das|nicht|Datei|Fehler|Aufgabe)\b")
+    texts = [agent_mod.SYSTEM_PROMPT, agent_mod.SUMMARY_PROMPT, agent_mod.SPEC_SYSTEM,
+             agent_mod.SPEC_PROMPT, agent_mod.TESTPLAN_PROMPT, agent_mod.DOCS_NOTE,
+             agent_mod.TRUNCATED_TOOL_MSG, agent_mod.NUDGE, json.dumps(agent_mod.TOOLS),
+             swarm_mod.SUB_SYSTEM_PROMPT, swarm_mod.SUBAGENT_PROMPT_SECTION,
+             swarm_mod.COORDINATOR_SECTION, json.dumps(swarm_mod.SUBAGENT_TOOLS),
+             gen_mod.GEN_SYSTEM, gen_mod.GEN_PROMPT,
+             " ".join(t[2] + " " + t[3] for t in gen_mod.TOPICS)]
+    for t in texts:
+        assert not german.search(t), german.search(t).group(0)
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tasks")
+    for fn in os.listdir(root):
+        _, body, _ = Manager._read_task_file(os.path.join(root, fn))
+        hit = german.search(body.replace("Möller", ""))
+        assert not hit, (fn, hit.group(0))

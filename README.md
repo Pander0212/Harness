@@ -315,6 +315,14 @@ Schwarm-Modus gestartet.
   nach 30 fehlerfreien Minuten wird sie schrittweise wieder erhöht. Mit dem Button
   „Drosselung zurücksetzen“ im UI sofort wieder volle Parallelität.
 
+### Sprache
+Alles, was das Modell liest – Systemprompts, Tool-Beschreibungen, Tool-Rückmeldungen,
+Komprimierungs-/Fortsetzungsnachrichten, SPEC/TESTPLAN-Aufträge, Generator,
+Subagenten/Schwarm und die eingebauten Aufgaben – ist **englisch**. Oberfläche, Logs und
+Ereignisse bleiben deutsch. Wird der Text einer eingebauten Aufgabe geändert (z. B. die
+Übersetzung), übernehmen noch nicht begonnene Aufgaben ihn beim nächsten Start
+automatisch; bereits begonnene behalten ihren ursprünglichen Text.
+
 ### Eingebaute Aufgaben
 `tasks/*.md` enthält 25 große Projekte (u. a. SQL-Datenbank, Interpreter, Git-Klon,
 HTTP-Server, RISC-V-Emulator, TCP/IP-Stack, Raft, LSM-Speicher, Kryptographie,
@@ -329,8 +337,9 @@ und hinten an die Queue gehängt. Ein optionaler Kopf steuert die Aufgabe:
 spec_docs: false     # keine SPEC.md/TESTPLAN.md vorab (true = immer, fehlt = Einstellung)
 mode: swarm          # als Schwarm-Koordinator starten
 topic: crypto        # Themenbereich (für Statistik und Generator)
+legacy_title: "…"    # früherer Titel, damit bestehende Installationen die Aufgabe erkennen
 ---
-# Titel der Aufgabe
+# Title of the task
 ...
 ```
 

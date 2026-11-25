@@ -1,51 +1,48 @@
 ---
 topic: ml
+legacy_title: Autograd-Engine, neuronale Netze und ein kleiner Transformer von Grund auf
 ---
-# Autograd-Engine, neuronale Netze und ein kleiner Transformer von Grund auf
+# Autograd Engine, Neural Networks and a Small Transformer from Scratch
 
-## Ziel
-Implementiere in reinem Python 3 (nur Standardbibliothek; kein NumPy) eine Tensor-
-Bibliothek mit automatischer Differenzierung, darauf neuronale Netzschichten,
-Optimierer, einen BPE-Tokenizer und einen kleinen Decoder-only-Transformer, der auf
-einem Textkorpus trainiert wird. Effizienz in reinem Python ist Teil der Aufgabe.
-Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Implement, in pure Python 3 (standard library only; no NumPy), a tensor library with
+automatic differentiation, and on top of it neural network layers, optimizers, a BPE
+tokenizer and a small decoder-only transformer trained on a text corpus. Efficiency in
+pure Python is part of the task. Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Tensoren**: n-dimensionale Arrays (flache Liste + Shape + Strides), Broadcasting,
-   Indexierung und Slicing, reshape/transpose/permute als Views, Reduktionen über
-   Achsen, matmul (batched), Konkatenation, Datentyp float.
-2. **Autograd**: dynamischer Berechnungsgraph, topologische Sortierung, Rückwärtspfad
-   für alle Operationen inklusive Broadcasting-Reduktion der Gradienten,
-   `no_grad`-Kontext, Gradientenakkumulation, `detach`.
-3. **Gradient-Check**: numerische Gradienten (zentrale Differenzen) für jede Operation.
-4. **Schichten**: Linear, Embedding, LayerNorm, Dropout, Aktivierungen (ReLU, GELU,
-   Tanh, Softmax mit numerisch stabiler Form), Cross-Entropy (stabil, mit Label
-   Smoothing), Conv1D, Residual-Blöcke; Parameterverwaltung, `state_dict`, Speichern
-   und Laden.
-5. **Optimierer**: SGD mit Momentum/Nesterov, Adam, AdamW, Lernraten-Scheduler
-   (Warmup + Cosine), Gradient Clipping.
-6. **BPE-Tokenizer**: Training auf einem Korpus, Merges, Kodieren/Dekodieren
-   (verlustfrei, Bytes-Fallback), Spezial-Token, Speichern/Laden.
-7. **Transformer**: Multi-Head-Self-Attention mit kausaler Maske, Positions-Embeddings
-   (gelernt und rotierend/RoPE), Feed-Forward, Pre-LN-Blöcke; Training auf einem
-   kleinen Korpus (z. B. selbst geschriebene Texte oder Gemeinfreies, das im Projekt
-   enthalten ist), Sampling mit Temperatur, Top-k und Top-p; KV-Cache für schnelles
-   Generieren.
-8. **Klassische Aufgaben**: MLP auf synthetischen Spiralen-Daten, Klassifikation von
-   prozedural erzeugten 8×8-Ziffern; Lernkurven als CSV.
+## Functional Requirements
+1. **Tensors**: n-dimensional arrays (flat list + shape + strides), broadcasting,
+   indexing and slicing, reshape/transpose/permute as views, reductions along axes,
+   matmul (batched), concatenation, float dtype.
+2. **Autograd**: dynamic computation graph, topological sort, backward pass for all
+   operations including broadcast reduction of gradients, `no_grad` context, gradient
+   accumulation, `detach`.
+3. **Gradient check**: numerical gradients (central differences) for every operation.
+4. **Layers**: Linear, Embedding, LayerNorm, Dropout, activations (ReLU, GELU, Tanh,
+   softmax in a numerically stable form), cross-entropy (stable, with label smoothing),
+   Conv1D, residual blocks; parameter management, `state_dict`, saving and loading.
+5. **Optimizers**: SGD with momentum/Nesterov, Adam, AdamW, learning rate schedulers
+   (warmup + cosine), gradient clipping.
+6. **BPE tokenizer**: training on a corpus, merges, encoding/decoding (lossless, byte
+   fallback), special tokens, saving/loading.
+7. **Transformer**: multi-head self-attention with a causal mask, positional embeddings
+   (learned and rotary/RoPE), feed-forward, pre-LN blocks; training on a small corpus (e.g.
+   self-written texts or public-domain material included in the project), sampling with
+   temperature, top-k and top-p; KV cache for fast generation.
+8. **Classic tasks**: MLP on a synthetic spiral dataset, classification of procedurally
+   generated 8×8 digits; learning curves as CSV.
 
-## Teststrategie (pytest)
-- Gradient-Check für jede Operation und Schicht (mindestens 80 Fälle, verschiedene
-  Shapes und Broadcasting-Konstellationen).
-- Tensor-Semantik gegen eine naive Referenz (verschachtelte Listen) für 300 zufällige
-  Operationen.
-- Optimierer gegen von Hand berechnete Schritte; Tokenizer-Round-Trip über Unicode.
-- Lernfähigkeit: Spiralen-Datensatz > 95 % Genauigkeit; Transformer überanpasst einen
-  kleinen Text (Verlust sinkt unter Schwelle); KV-Cache liefert identische Logits.
-- Mindestens 250 Testfälle.
+## Test Strategy (pytest)
+- Gradient check for every operation and layer (at least 80 cases, different shapes and
+  broadcasting configurations).
+- Tensor semantics against a naive reference (nested lists) for 300 random operations.
+- Optimizers against hand-computed steps; tokenizer round trip over Unicode.
+- Learning ability: spiral dataset > 95 % accuracy; the transformer overfits a small text
+  (loss falls below a threshold); the KV cache yields identical logits.
+- At least 250 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Trainingsergebnisse und Laufzeiten in DESIGN.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; training results and run times in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

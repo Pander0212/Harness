@@ -17,117 +17,116 @@ from swarm import (COORDINATOR_SECTION, SUB_SYSTEM_PROMPT, SUBAGENT_PROMPT_SECTI
 
 # --------------------------------------------------------------------------- Prompts
 
-SYSTEM_PROMPT = """Du bist ein erfahrener, gründlicher Softwareentwickler und arbeitest \
-vollständig autonom an einem größeren Software-Projekt. Niemand beantwortet Rückfragen – \
-triff begründete Entscheidungen selbst und dokumentiere sie.
+SYSTEM_PROMPT = """You are an experienced, meticulous software engineer working fully \
+autonomously on a substantial software project. Nobody will answer questions – make \
+well-reasoned decisions yourself and document them.
 
-UMGEBUNG
-- Dein Arbeitsverzeichnis (Workspace): {workspace}
-- Alle bash-Befehle laufen in diesem Verzeichnis. {sandbox_note}
-- Werkzeuge: bash (Shell-Befehl mit Timeout), read_file, write_file, list_dir, finish.
-- Jede deiner Antworten ist auf {max_out} Tokens begrenzt (inklusive Tool-Call-Argumente). \
-Schreibe große Dateien deshalb in Teilen: write_file für den ersten Teil, dann \
-write_file mit append=true (je höchstens ca. 300 Zeilen), oder teile Code in Module auf.
-- Tool-Ausgaben werden auf {limit} Zeichen gekürzt (Anfang + Ende). Filtere große Ausgaben \
-gezielt (z. B. `pytest -q -x`, `| tail -50`, `grep`).
-- Python 3 mit pytest steht zur Verfügung. Nutze nur die Standardbibliothek, außer die \
-Aufgabe erlaubt ausdrücklich etwas anderes.
-- Zeitbudget: maximal {max_hours} Stunden. Der Verlauf wird bei sehr langem Kontext \
-automatisch zusammengefasst; halte deshalb deinen Stand in Dateien fest.
+ENVIRONMENT
+- Your working directory (workspace): {workspace}
+- All bash commands run in this directory. {sandbox_note}
+- Tools: bash (shell command with timeout), read_file, write_file, list_dir, finish.
+- Each of your responses is limited to {max_out} tokens (including tool-call arguments). \
+Therefore write large files in parts: write_file for the first part, then write_file with \
+append=true (at most ~300 lines each), or split the code into modules.
+- Tool output is truncated to {limit} characters (beginning + end). Filter large output \
+deliberately (e.g. `pytest -q -x`, `| tail -50`, `grep`).
+- Python 3 with pytest is available. Use only the standard library unless the task \
+explicitly allows otherwise.
+- Time budget: at most {max_hours} hours. When the context gets very long, the history is \
+summarized automatically, so keep your state in files.
 
-ARBEITSWEISE (verbindlich)
-1. Test-driven: Schreibe zu jedem Feature zuerst bzw. zeitgleich pytest-Tests. Führe nach \
-JEDEM Feature die Tests aus und behebe Fehler, bevor du weitermachst.
-2. Pflege DESIGN.md: Architektur, Module, Datenformate, wichtige Entscheidungen samt \
-Begründung.
-3. Pflege PROGRESS.md: Checkliste aller Teilaufgaben ([x] erledigt / [ ] offen), aktueller \
-Stand, nächster konkreter Schritt, bekannte Probleme. Aktualisiere sie nach jedem \
-abgeschlossenen Schritt – nach einem Absturz oder Neustart setzt du anhand von PROGRESS.md \
-fort.
-4. Scheitert derselbe Fehler dreimal hintereinander, wechsle bewusst den Ansatz (anderes \
-Design, Problem verkleinern, Debug-Ausgaben, Minimalbeispiel) und notiere das in PROGRESS.md.
-5. Arbeite in sinnvollen, überprüfbaren Schritten. Lies Dateien, bevor du sie änderst. \
-Schreibe sauberen, gut strukturierten, dokumentierten Code.
-6. Rufe `finish` NUR auf, wenn ALLE Anforderungen der Aufgabe umgesetzt sind und die \
-gesamte Testsuite grün ist (`python3 -m pytest -q`). Der Harness prüft das beim finish \
-nach und lehnt ab, wenn Tests fehlschlagen.
-7. Antworte immer mit Tool-Calls, solange es Arbeit gibt. Reiner Text ohne Tool-Call gilt \
-als Pause; mehrere Pausen hintereinander beenden die Sitzung.
+WORKING RULES (mandatory)
+1. Test-driven: write pytest tests before or alongside every feature. Run the tests after \
+EVERY feature and fix failures before moving on.
+2. Maintain DESIGN.md: architecture, modules, data formats, key decisions with rationale.
+3. Maintain PROGRESS.md: checklist of all subtasks ([x] done / [ ] open), current state, \
+the next concrete step, known issues. Update it after every completed step – after a \
+crash or restart you will resume from PROGRESS.md.
+4. If the same error fails three times in a row, deliberately change your approach \
+(different design, shrink the problem, debug output, minimal example) and note it in \
+PROGRESS.md.
+5. Work in sensible, verifiable steps. Read files before changing them. Write clean, \
+well-structured, documented code.
+6. Call `finish` ONLY when ALL requirements of the task are implemented and the entire \
+test suite passes (`python3 -m pytest -q`). The harness verifies this on finish and \
+rejects it if tests fail.
+7. Always respond with tool calls while there is work to do. Plain text without a tool \
+call counts as a pause; several pauses in a row end the session.
 """
 
-SUMMARY_PROMPT = """KONTEXT-KOMPRIMIERUNG: Der Gesprächsverlauf wird gleich gelöscht, weil \
-das Kontextfenster voll ist. Schreibe JETZT (ohne Tool-Calls, nur Text) eine präzise, \
-vollständige Zusammenfassung, mit der du nahtlos weiterarbeiten kannst:
-1. Was ist bereits fertig (Module, Dateien, Features, Teststand mit Zahlen)?
-2. Architektur und wichtige Designentscheidungen (kurz).
-3. Woran wurde zuletzt gearbeitet, welche Fehler sind offen, was wurde schon erfolglos \
-versucht?
-4. Die nächsten konkreten Schritte in Reihenfolge.
-5. Welche Dateien sind für den nächsten Schritt relevant?
-Sei konkret (Dateinamen, Funktionsnamen, Fehlermeldungen)."""
+SUMMARY_PROMPT = """CONTEXT COMPRESSION: The conversation history is about to be cleared \
+because the context window is full. Write NOW (no tool calls, text only) a precise, \
+complete summary that lets you continue seamlessly:
+1. What is already done (modules, files, features, test status with numbers)?
+2. Architecture and important design decisions (briefly).
+3. What were you working on last, which errors are open, what has already been tried \
+without success?
+4. The next concrete steps in order.
+5. Which files are relevant for the next step?
+Be specific (file names, function names, error messages)."""
 
-SPEC_SYSTEM = ("Du bist ein erfahrener Software-Architekt. Du schreibst präzise, "
-               "vollständige technische Dokumente, nach denen ein Entwicklerteam ohne "
-               "Rückfragen implementieren und testen kann.")
+SPEC_SYSTEM = ("You are an experienced software architect. You write precise, complete "
+               "technical documents that a development team can implement and test "
+               "without asking questions.")
 
-SPEC_PROMPT = """Für das folgende Projekt soll vor Beginn der Implementierung eine \
-verbindliche technische Spezifikation entstehen. Sie wird als docs/SPEC.md abgelegt; der \
-Entwickler implementiert exakt danach.
+SPEC_PROMPT = """Before implementation starts, a binding technical specification is \
+needed for the following project. It will be stored as docs/SPEC.md; the developer will \
+implement exactly according to it.
 
-# Projekt: {title}
+# Project: {title}
 
 {prompt}
 
 ---
-Schreibe jetzt die vollständige SPEC.md (nur Markdown, keine Einleitung, kein Kommentar \
-davor oder danach). Umfang: mindestens {words} Wörter. Gliederung:
-1. Zweck, Umfang, Nicht-Ziele, Glossar
-2. Architektur: Pakete/Module mit Verantwortlichkeiten und Abhängigkeiten
-3. Öffentliche Schnittstellen: für jedes Modul alle Klassen/Funktionen mit exakten \
-Signaturen (Python-Typannotationen), Parametern, Rückgabewerten, Ausnahmen
-4. Datenformate und Algorithmen im Detail (Dateiformate, Kodierungen, Invarianten, \
-Komplexität)
-5. Genaues Verhalten inklusive Randfällen und Fehlerbehandlung (mit Fehlermeldungen)
-6. Ausführliche Beispiele (Eingabe → erwartete Ausgabe)
-7. Leistungsanforderungen und Abnahmekriterien"""
+Now write the complete SPEC.md (Markdown only, no preamble, no comment before or after). \
+Length: at least {words} words. Structure:
+1. Purpose, scope, non-goals, glossary
+2. Architecture: packages/modules with responsibilities and dependencies
+3. Public interfaces: for every module all classes/functions with exact signatures \
+(Python type annotations), parameters, return values, exceptions
+4. Data formats and algorithms in detail (file formats, encodings, invariants, \
+complexity)
+5. Exact behavior including edge cases and error handling (with error messages)
+6. Detailed examples (input → expected output)
+7. Performance requirements and acceptance criteria"""
 
-TESTPLAN_PROMPT = """Schreibe jetzt passend zu dieser Spezifikation den verbindlichen \
-Testkatalog docs/TESTPLAN.md (nur Markdown, ohne Einleitung). Umfang: mindestens {words} \
-Wörter. Für jedes Modul nummerierte Testfälle (z. B. LEX-001) mit konkreten Eingaben und \
-exakt erwarteten Ausgaben bzw. Ausnahmen; Randfälle; Eigenschafts-/Zufallstests mit \
-festem Seed; Integrations- und End-to-End-Szenarien; Leistungstests. Gib zu jedem Testfall \
-an, in welcher pytest-Datei er umgesetzt werden soll."""
+TESTPLAN_PROMPT = """Now write the binding test catalog docs/TESTPLAN.md matching this \
+specification (Markdown only, no preamble). Length: at least {words} words. For every \
+module, numbered test cases (e.g. LEX-001) with concrete inputs and exactly expected \
+outputs or exceptions; edge cases; property/randomized tests with a fixed seed; \
+integration and end-to-end scenarios; performance tests. For each test case state in \
+which pytest file it should be implemented."""
 
-DOCS_NOTE = ("Im Ordner docs/ liegen die verbindliche Spezifikation (docs/SPEC.md) und der "
-             "Testkatalog (docs/TESTPLAN.md). Lies beide vollständig mit read_file, bevor du "
-             "beginnst. Implementiere exakt nach SPEC.md, setze alle Testfälle aus "
-             "TESTPLAN.md als pytest-Tests um (IDs als Kommentar) und schlage bei jeder "
-             "Unklarheit erneut darin nach. Abweichungen nur mit Begründung in DESIGN.md.")
+DOCS_NOTE = ("The docs/ folder contains the binding specification (docs/SPEC.md) and the "
+             "test catalog (docs/TESTPLAN.md). Read both completely with read_file before "
+             "you start. Implement exactly according to SPEC.md, implement every test case "
+             "from TESTPLAN.md as a pytest test (IDs as comments) and consult them again "
+             "whenever something is unclear. Deviate only with a rationale in DESIGN.md.")
 
 TRUNCATED_TOOL_MSG = (
-    "Deine letzte Antwort wurde am Ausgabelimit ({limit} Tokens) abgeschnitten; der "
-    "Tool-Call war unvollständig und wurde NICHT ausgeführt. Teile große Inhalte auf: "
-    "schreibe die Datei in mehreren Teilen (erster Teil mit write_file, weitere mit "
-    "write_file und append=true, je höchstens ca. 300 Zeilen) oder zerlege sie in "
-    "mehrere Module. Mache jetzt mit dem ersten Teil weiter.")
+    "Your last response was cut off at the output limit ({limit} tokens); the tool call "
+    "was incomplete and was NOT executed. Split large content: write the file in several "
+    "parts (first part with write_file, further parts with write_file and append=true, at "
+    "most ~300 lines each) or break it into several modules. Continue now with the first "
+    "part.")
 
-NUDGE = ("Du hast keinen Tool-Call verwendet. Arbeite mit den Werkzeugen weiter "
-         "(bash, read_file, write_file, list_dir). Wenn wirklich alles fertig ist und "
-         "alle Tests grün sind, rufe `finish` auf.")
+NUDGE = ("You did not use a tool call. Keep working with the tools (bash, read_file, "
+         "write_file, list_dir). If everything is truly finished and all tests pass, "
+         "call `finish`.")
 
 TOOLS = [
     {"type": "function", "function": {
         "name": "bash",
-        "description": "Führt einen bash-Befehl im Workspace aus. Gibt Exit-Code und "
-                       "kombinierte stdout/stderr-Ausgabe zurück (gekürzt).",
+        "description": "Runs a bash command in the workspace. Returns the exit code and the "
+                       "combined stdout/stderr output (truncated).",
         "parameters": {"type": "object", "properties": {
-            "command": {"type": "string", "description": "Der auszuführende Befehl"},
-            "timeout": {"type": "integer", "description": "Timeout in Sekunden (Standard 600)"}},
+            "command": {"type": "string", "description": "The command to run"},
+            "timeout": {"type": "integer", "description": "Timeout in seconds (default 600)"}},
             "required": ["command"]}}},
     {"type": "function", "function": {
         "name": "read_file",
-        "description": "Liest eine Textdatei. Optional ab Zeile `offset` (1-basiert) "
-                       "höchstens `limit` Zeilen.",
+        "description": "Reads a text file. Optionally starting at line `offset` (1-based), "
+                       "at most `limit` lines.",
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"},
             "offset": {"type": "integer"},
@@ -135,27 +134,27 @@ TOOLS = [
             "required": ["path"]}}},
     {"type": "function", "function": {
         "name": "write_file",
-        "description": "Schreibt (überschreibt) eine Datei. Mit append=true wird an eine "
-                       "bestehende Datei angehängt – so lassen sich große Dateien in "
-                       "mehreren Teilen schreiben. Ordner werden automatisch angelegt.",
+        "description": "Writes (overwrites) a file. With append=true the content is appended "
+                       "to an existing file – use this to write large files in several "
+                       "parts. Parent directories are created automatically.",
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"},
             "content": {"type": "string"},
-            "append": {"type": "boolean", "description": "an Datei anhängen statt "
-                                                         "überschreiben"}},
+            "append": {"type": "boolean", "description": "append to the file instead of "
+                                                         "overwriting it"}},
             "required": ["path", "content"]}}},
     {"type": "function", "function": {
         "name": "list_dir",
-        "description": "Listet einen Ordner auf (optional rekursiv).",
+        "description": "Lists a directory (optionally recursive).",
         "parameters": {"type": "object", "properties": {
-            "path": {"type": "string", "description": "Standard: Workspace"},
+            "path": {"type": "string", "description": "Default: workspace"},
             "recursive": {"type": "boolean"}}}}},
     {"type": "function", "function": {
         "name": "finish",
-        "description": "Beendet die Aufgabe. NUR aufrufen, wenn alles fertig ist und alle "
-                       "Tests grün sind.",
+        "description": "Ends the task. Call ONLY when everything is done and all tests "
+                       "pass.",
         "parameters": {"type": "object", "properties": {
-            "summary": {"type": "string", "description": "Zusammenfassung des Ergebnisses"}},
+            "summary": {"type": "string", "description": "Summary of the result"}},
             "required": ["summary"]}}},
 ]
 
@@ -661,9 +660,9 @@ class Agent:
                     size = 0
                 out.append(f"{path} ({size} B)")
                 if len(out) >= max_entries:
-                    out.append("... (weitere Dateien)")
+                    out.append("... (more files)")
                     return "\n".join(out)
-        return "\n".join(out) or "(leer)"
+        return "\n".join(out) or "(empty)"
 
     def _condensed_transcript(self, max_chars=300000):
         parts = []
@@ -724,13 +723,13 @@ class Agent:
     def _workspace_snapshot(self):
         prog = self._read_ws_file("PROGRESS.md", 8000)
         design = self._read_ws_file("DESIGN.md", 6000)
-        s = "\n\n## Aktueller Inhalt von PROGRESS.md\n" + (prog or "(nicht vorhanden)")
-        s += "\n\n## Aktueller Inhalt von DESIGN.md\n" + (design or "(nicht vorhanden)")
-        s += "\n\n## Dateien im Workspace\n" + self.file_tree()
+        s = "\n\n## Current content of PROGRESS.md\n" + (prog or "(does not exist)")
+        s += "\n\n## Current content of DESIGN.md\n" + (design or "(does not exist)")
+        s += "\n\n## Files in the workspace\n" + self.file_tree()
         if self.docs_exist():
-            s += ("\n\nVerbindlich: docs/SPEC.md (Spezifikation) und docs/TESTPLAN.md "
-                  "(Testkatalog). Lies die für den nächsten Schritt relevanten Abschnitte "
-                  "erneut, bevor du weiterarbeitest.")
+            s += ("\n\nBinding: docs/SPEC.md (specification) and docs/TESTPLAN.md "
+                  "(test catalog). Re-read the sections relevant to the next step before "
+                  "you continue.")
         return s
 
     def compress(self, reason=""):
@@ -744,20 +743,19 @@ class Agent:
             except ContextTooLongError:
                 summary = None
         if not summary or not summary.strip():
-            req = [{"role": "system", "content": "Du fasst Arbeitsverläufe eines "
-                    "Software-Agenten präzise zusammen."},
-                   {"role": "user", "content": f"Aufgabe:\n{truncate(self.task['prompt'], 6000)}"
-                    f"\n\nVerlauf (gekürzt):\n{self._condensed_transcript()}\n\n{SUMMARY_PROMPT}"}]
+            req = [{"role": "system", "content": "You precisely summarize the work history "
+                    "of a software agent."},
+                   {"role": "user", "content": f"Task:\n{truncate(self.task['prompt'], 6000)}"
+                    f"\n\nHistory (abridged):\n{self._condensed_transcript()}\n\n{SUMMARY_PROMPT}"}]
             summary, _ = self.request("summary", req, with_tools=False)
         self.stats["compressions"] += 1
         n = self.stats["compressions"]
         self._jsonl("compression", number=n, summary=summary)
         new = self._base_messages()
-        body = (f"# KONTEXT-KOMPRIMIERUNG #{n}\nDer bisherige Verlauf wurde wegen "
-                f"Kontextlänge zusammengefasst. Deine eigene Zusammenfassung:\n\n{summary}"
-                f"{self._workspace_snapshot()}\n\nLies jetzt die für den nächsten Schritt "
-                "relevanten Dateien erneut ein (read_file), führe die Tests aus und arbeite "
-                "an der nächsten offenen Teilaufgabe weiter.")
+        body = (f"# CONTEXT COMPRESSION #{n}\nThe previous history was summarized because "
+                f"of its length. Your own summary:\n\n{summary}"
+                f"{self._workspace_snapshot()}\n\nNow re-read the files relevant to the next "
+                "step (read_file), run the tests and continue with the next open subtask.")
         self.messages = []
         for m in new:
             self._add(m)
@@ -768,22 +766,22 @@ class Agent:
 
     # ------------------------------------------------------------- Start
     def _system_prompt(self):
-        note = ("bash läuft in einer bubblewrap-Sandbox: nur erlaubte Ordner sind "
-                "beschreibbar." if self.bash.use_bwrap else
-                "Bleibe strikt in deinem Workspace.")
+        note = ("bash runs in a bubblewrap sandbox: only the allowed directories are "
+                "writable." if self.bash.use_bwrap else
+                "Stay strictly inside your workspace.")
         if os.name == "nt":
-            note += (" System: Windows, Befehle laufen in Git Bash (python/python3 und "
-                     "pytest sind verfügbar; Pfade mit / schreiben).")
+            note += (" System: Windows, commands run in Git Bash (python/python3 and pytest "
+                     "are available; write paths with /).")
         if self.depth:
             scope = ", ".join(os.path.relpath(x, self.workspace) for x in self.scope) \
-                or "gesamter Workspace"
+                or "entire workspace"
             return SUB_SYSTEM_PROMPT.format(workspace=self.workspace, scope=scope,
                                             limit=self.cfg["tool_output_limit"],
                                             max_out=self.cfg.get("max_output_tokens") or 8000,
                                             max_hours=self.max_hours)
         text = SYSTEM_PROMPT.format(workspace=self.workspace, sandbox_note=note,
                                     limit=self.cfg["tool_output_limit"],
-                                    max_out=self.cfg.get("max_output_tokens") or "ca. 8000",
+                                    max_out=self.cfg.get("max_output_tokens") or "about 8000",
                                     max_hours=self.max_hours)
         if self.subagents_allowed():
             text += SUBAGENT_PROMPT_SECTION.format(max_sub=self.cfg["max_subagents"])
@@ -796,15 +794,15 @@ class Agent:
             design = self._read_ws_file("DESIGN.md", 8000)
             return [{"role": "system", "content": self._system_prompt()},
                     {"role": "user", "content":
-                     f"# Arbeitspaket: {self.task['title']}\n(Teil des Projekts "
+                     f"# Work package: {self.task['title']}\n(part of the project "
                      f"\"{self.task.get('parent_title', '')}\")\n\n{self.task['prompt']}"
-                     + (f"\n\n## DESIGN.md des Projekts\n{design}" if design else "")
-                     + ("\n\nDie verbindliche Spezifikation steht in docs/SPEC.md, der "
-                        "Testkatalog in docs/TESTPLAN.md – lies die für dein Paket "
-                        "relevanten Abschnitte." if self.docs_exist() else "")}]
+                     + (f"\n\n## Project DESIGN.md\n{design}" if design else "")
+                     + ("\n\nThe binding specification is in docs/SPEC.md, the test "
+                        "catalog in docs/TESTPLAN.md – read the sections relevant to your "
+                        "package." if self.docs_exist() else "")}]
         return [{"role": "system", "content": self._system_prompt()},
-                {"role": "user", "content": f"# Aufgabe: {self.task['title']}\n\n"
-                 f"{self.task['prompt']}\n\nArbeitsverzeichnis: {self.workspace}"}]
+                {"role": "user", "content": f"# Task: {self.task['title']}\n\n"
+                 f"{self.task['prompt']}\n\nWorking directory: {self.workspace}"}]
 
     def _init_messages(self):
         self.messages = []
@@ -812,26 +810,26 @@ class Agent:
             self._add(m)
         has_progress = os.path.exists(os.path.join(self.workspace, "PROGRESS.md"))
         if self.depth:
-            self._add({"role": "user", "content": "Beginne jetzt mit deinem Arbeitspaket."})
+            self._add({"role": "user", "content": "Start working on your work package now."})
         elif self.resume or has_progress:
             self._add({"role": "user", "content":
-                       "# FORTSETZUNG\nDiese Aufgabe wurde bereits begonnen und nach einem "
-                       "Neustart, Absturz oder Abbruch wieder aufgenommen."
-                       f"{self._workspace_snapshot()}\n\nVerschaffe dir einen Überblick "
-                       "(relevante Dateien lesen, Tests ausführen) und setze an der nächsten "
-                       "offenen Stelle laut PROGRESS.md fort."})
+                       "# RESUMING\nThis task was started earlier and is being resumed "
+                       "after a restart, crash or interruption."
+                       f"{self._workspace_snapshot()}\n\nGet an overview (read the relevant "
+                       "files, run the tests) and continue at the next open point according "
+                       "to PROGRESS.md."})
             self.log("Setze anhand PROGRESS.md fort")
         else:
             note = (DOCS_NOTE + " ") if self.docs_exist() else ""
             self._add({"role": "user", "content":
-                       f"{note}Beginne jetzt. Lege zuerst DESIGN.md und PROGRESS.md an."})
+                       f"{note}Start now. First create DESIGN.md and PROGRESS.md."})
         self.context_tokens = self._estimate_tokens(self.messages)
 
     # ------------------------------------------------------------- Tools
     def _tool_bash(self, args):
         cmd = args.get("command")
         if not isinstance(cmd, str) or not cmd.strip():
-            return "Fehler: 'command' fehlt"
+            return "Error: 'command' is missing"
         timeout = args.get("timeout") or self.cfg["bash_timeout"]
         try:
             timeout = max(1, min(int(timeout), int(self.cfg["bash_max_timeout"])))
@@ -846,7 +844,7 @@ class Agent:
     def _tool_read(self, args):
         p = self.guard.resolve(args.get("path", ""))
         if os.path.isdir(p):
-            return f"Fehler: {p} ist ein Ordner (list_dir benutzen)"
+            return f"Error: {p} is a directory (use list_dir)"
         with open(p, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
         off, lim = args.get("offset"), args.get("limit")
@@ -856,31 +854,31 @@ class Agent:
             end = start + int(lim) if lim else len(lines)
             text = "".join(lines[start:end])
             if not text:
-                return f"(keine Zeilen im Bereich; Datei hat {len(lines)} Zeilen)"
-        return text if text else "(leere Datei)"
+                return f"(no lines in this range; the file has {len(lines)} lines)"
+        return text if text else "(empty file)"
 
     def _tool_write(self, args):
         p = self.guard.resolve(args.get("path", ""))
         if self.scope and not any(p == s or p.startswith(s.rstrip(os.sep) + os.sep)
                                   for s in self.scope):
-            return ("Fehler: außerhalb deines Schreibbereichs (scope: " +
+            return ("Error: outside your write scope (scope: " +
                     ", ".join(os.path.relpath(s, self.workspace) for s in self.scope) + ")")
         content = args.get("content")
         if not isinstance(content, str):
-            return "Fehler: 'content' muss ein String sein"
+            return "Error: 'content' must be a string"
         os.makedirs(os.path.dirname(p), exist_ok=True)
         append = bool(args.get("append"))
         with open(p, "a" if append else "w", encoding="utf-8") as f:
             f.write(content)
         n = len(content.encode("utf-8"))
         if append:
-            return f"OK: {n} Bytes an {p} angehängt (Datei jetzt {os.path.getsize(p)} Bytes)"
-        return f"OK: {n} Bytes nach {p} geschrieben"
+            return f"OK: appended {n} bytes to {p} (file now {os.path.getsize(p)} bytes)"
+        return f"OK: wrote {n} bytes to {p}"
 
     def _tool_list(self, args):
         p = self.guard.resolve(args.get("path") or ".")
         if not os.path.isdir(p):
-            return f"Fehler: {p} ist kein Ordner"
+            return f"Error: {p} is not a directory"
         out = []
         if args.get("recursive"):
             for root, dirs, files in os.walk(p):
@@ -893,7 +891,7 @@ class Agent:
                     out.append(f"{os.path.normpath(os.path.join(rel, fn))}  "
                                f"({os.path.getsize(fp) if os.path.exists(fp) else 0} B)")
                 if len(out) > 1000:
-                    out.append("... (gekürzt)")
+                    out.append("... (truncated)")
                     break
         else:
             for e in sorted(os.scandir(p), key=lambda e: e.name):
@@ -904,7 +902,7 @@ class Agent:
                         out.append(f"{e.name}  ({e.stat().st_size} B)")
                     except OSError:
                         out.append(e.name)
-        return "\n".join(out) or "(leer)"
+        return "\n".join(out) or "(empty)"
 
     def _tool_finish(self, args):
         summary = str(args.get("summary") or "")
@@ -919,13 +917,13 @@ class Agent:
             if not green:
                 self.stats["finish_rejections"] += 1
                 self.log("finish abgelehnt: Testsuite nicht grün")
-                return (False, "finish ABGELEHNT: Die Testsuite ist nicht grün "
-                        "(oder es wurden keine Tests gefunden). Ausgabe von "
-                        f"`python3 -m pytest -q`:\n{out}\nBehebe die Probleme und rufe "
-                        "finish danach erneut auf.")
+                return (False, "finish REJECTED: the test suite is not green (or no "
+                        "tests were found). Output of "
+                        f"`python3 -m pytest -q`:\n{out}\nFix the problems and call "
+                        "finish again afterwards.")
             self.stats["green_suites"] += 1
         self.finished_summary = summary
-        return (True, "Aufgabe als abgeschlossen markiert.")
+        return (True, "Task marked as finished.")
 
     def execute_tool(self, call):
         """Führt einen Tool-Call aus. -> (ergebnistext, finished)"""
@@ -937,7 +935,7 @@ class Agent:
             if not isinstance(args, dict):
                 raise ValueError("Argumente sind kein Objekt")
         except ValueError as e:
-            return f"Fehler: ungültige JSON-Argumente ({e}). Bitte erneut senden.", False
+            return f"Error: invalid JSON arguments ({e}). Please send the call again.", False
         short = json.dumps(args, ensure_ascii=False)
         if name == "write_file":
             short = f"{args.get('path')} ({len(str(args.get('content', '')))} Zeichen)"
@@ -964,15 +962,15 @@ class Agent:
                 res = (self.subs.tool_subagent(args) if name == "subagent"
                        else self.subs.tool_swarm(args))
             else:
-                res = f"Fehler: unbekanntes Tool '{name}'"
+                res = f"Error: unknown tool '{name}'"
         except PathError as e:
-            res = f"Fehler: {e}"
+            res = f"Error: {e}"
         except FileNotFoundError as e:
-            res = f"Fehler: Datei nicht gefunden: {e.filename}"
+            res = f"Error: file not found: {e.filename}"
         except (StoppedError, AuthError):
             raise
         except Exception as e:
-            res = f"Fehler bei {name}: {type(e).__name__}: {e}"
+            res = f"Error in {name}: {type(e).__name__}: {e}"
         return truncate(res, int(self.cfg["tool_output_limit"])), False
 
     # ------------------------------------------------------------- Hauptschleife

@@ -1,80 +1,81 @@
-# Eigene SQL-Datenbank in Python (MiniSQL)
+---
+legacy_title: Eigene SQL-Datenbank in Python (MiniSQL)
+---
+# Your Own SQL Database in Python (MiniSQL)
 
-## Ziel
-Entwickle eine eigenständige relationale Datenbank **MiniSQL** in reinem Python 3 (nur
-Standardbibliothek; `sqlite3` darf ausschließlich in den Tests als Referenz verwendet
-werden). Die Datenbank speichert Daten persistent in einer Datei, verwendet einen
-B+-Baum als Speicherstruktur, ein Write-Ahead-Log (WAL) für Crash-Sicherheit und
-unterstützt Transaktionen, JOINs und Aggregationen. Die Korrektheit wird durch einen
-automatischen Abgleich mit `sqlite3` über mindestens 500 generierte Testqueries belegt.
+## Goal
+Build a standalone relational database **MiniSQL** in pure Python 3 (standard library
+only; `sqlite3` may be used exclusively in the tests as a reference). The database stores
+data persistently in a file, uses a B+ tree as its storage structure, a write-ahead log
+(WAL) for crash safety, and supports transactions, JOINs and aggregations. Correctness is
+demonstrated by automatically comparing against `sqlite3` across at least 500 generated
+test queries.
 
-## Funktionale Anforderungen
-1. **Tokenizer/Lexer** für SQL: Schlüsselwörter (case-insensitive), Bezeichner (auch in
-   `"doppelten Anführungszeichen"`), Ganzzahlen, Gleitkommazahlen, Strings mit `''`-Escape,
-   Operatoren (`= <> != < <= > >= + - * / % ||`), Kommentare (`--` und `/* */`).
-   Fehlermeldungen mit Zeile und Spalte.
-2. **Parser** (rekursiver Abstieg mit korrekter Operator-Präzedenz) zu einem AST für:
-   - `CREATE TABLE` mit Typen `INTEGER`, `REAL`, `TEXT`, `PRIMARY KEY`, `NOT NULL`,
+## Functional Requirements
+1. **Tokenizer/lexer** for SQL: keywords (case-insensitive), identifiers (also in
+   `"double quotes"`), integers, floats, strings with `''` escapes, operators
+   (`= <> != < <= > >= + - * / % ||`), comments (`--` and `/* */`). Error messages with
+   line and column.
+2. **Parser** (recursive descent with correct operator precedence) producing an AST for:
+   - `CREATE TABLE` with types `INTEGER`, `REAL`, `TEXT`, `PRIMARY KEY`, `NOT NULL`,
      `UNIQUE`, `DEFAULT`; `DROP TABLE [IF EXISTS]`; `CREATE INDEX` / `DROP INDEX`.
    - `INSERT INTO t [(cols)] VALUES (...), (...)`, `INSERT ... SELECT`.
    - `UPDATE ... SET ... WHERE ...`, `DELETE FROM ... WHERE ...`.
    - `SELECT [DISTINCT] ... FROM ... [JOIN ... ON ...] [WHERE] [GROUP BY] [HAVING]
-     [ORDER BY ... ASC|DESC] [LIMIT n [OFFSET m]]`, Spalten-Aliase, Tabellen-Aliase,
-     `*` und `t.*`.
-   - Ausdrücke: Arithmetik, Vergleiche, `AND/OR/NOT`, `IS [NOT] NULL`, `BETWEEN`,
-     `IN (Liste)`, `IN (Subquery)`, `LIKE` mit `%` und `_`, `CASE WHEN`, skalare
-     Subqueries, Funktionen `ABS, LENGTH, UPPER, LOWER, COALESCE, ROUND, SUBSTR`.
+     [ORDER BY ... ASC|DESC] [LIMIT n [OFFSET m]]`, column aliases, table aliases,
+     `*` and `t.*`.
+   - Expressions: arithmetic, comparisons, `AND/OR/NOT`, `IS [NOT] NULL`, `BETWEEN`,
+     `IN (list)`, `IN (subquery)`, `LIKE` with `%` and `_`, `CASE WHEN`, scalar
+     subqueries, functions `ABS, LENGTH, UPPER, LOWER, COALESCE, ROUND, SUBSTR`.
    - `BEGIN`, `COMMIT`, `ROLLBACK`.
-3. **Semantik** wie SQLite, insbesondere dreiwertige Logik mit `NULL`, Integer-Division,
-   Sortierung von `NULL` (zuerst bei ASC), Typaffinität für die definierten Typen.
-4. **JOINs**: `INNER JOIN`, `LEFT [OUTER] JOIN`, `CROSS JOIN`, mehrere Joins
-   hintereinander, Self-Joins mit Aliasen. Implementiere Nested-Loop-Join und
-   zusätzlich Hash-Join für Gleichheitsbedingungen; der Planer wählt automatisch.
-5. **Aggregationen**: `COUNT(*)`, `COUNT(x)`, `COUNT(DISTINCT x)`, `SUM`, `AVG`, `MIN`,
-   `MAX`, `GROUP BY` über mehrere Spalten und Ausdrücke, `HAVING`.
-6. **Speicherschicht**:
-   - Seitenbasierte Datei (feste Seitengröße, z. B. 4096 Bytes) mit Pager und
-     LRU-Seitencache (konfigurierbare Größe).
-   - **B+-Baum** pro Tabelle (Schlüssel = rowid bzw. INTEGER PRIMARY KEY) mit
-     Blattverkettung für Range-Scans, Splits und Merges/Umverteilung beim Löschen.
-   - Sekundärindizes als eigene B+-Bäume; der Planer nutzt sie für `=` und
-     Bereichsbedingungen.
-   - Serialisierung von Zeilen in ein kompaktes Binärformat (Varints o. Ä.),
-     Overflow-Seiten für lange TEXT-Werte.
-7. **WAL und Transaktionen**: Änderungen werden zuerst ins WAL geschrieben (mit
-   Prüfsummen), Commit = fsync des WAL, Checkpoint überträgt Seiten in die Hauptdatei.
-   Nach einem simulierten Absturz (Prozess endet mitten in einer Transaktion,
-   abgeschnittenes WAL) muss die Datenbank beim Öffnen konsistent sein: committete
-   Transaktionen vorhanden, nicht committete verschwunden. `ROLLBACK` verwirft alles.
-8. **Schnittstellen**: Python-API (`db = minisql.connect(path)`, `db.execute(sql,
-   params)` mit `?`-Platzhaltern, Rückgabe von Zeilen als Tupel) und eine interaktive
-   CLI (`python -m minisql datei.db`) mit `.tables`, `.schema`, `.quit`.
-9. `EXPLAIN` gibt den gewählten Ausführungsplan als Text aus.
+3. **Semantics** like SQLite, in particular three-valued logic with `NULL`, integer
+   division, ordering of `NULL` (first for ASC), type affinity for the defined types.
+4. **JOINs**: `INNER JOIN`, `LEFT [OUTER] JOIN`, `CROSS JOIN`, several joins in a row,
+   self-joins with aliases. Implement nested-loop join and additionally hash join for
+   equality conditions; the planner chooses automatically.
+5. **Aggregations**: `COUNT(*)`, `COUNT(x)`, `COUNT(DISTINCT x)`, `SUM`, `AVG`, `MIN`,
+   `MAX`, `GROUP BY` over several columns and expressions, `HAVING`.
+6. **Storage layer**:
+   - Page-based file (fixed page size, e.g. 4096 bytes) with a pager and an LRU page
+     cache (configurable size).
+   - **B+ tree** per table (key = rowid or INTEGER PRIMARY KEY) with leaf chaining for
+     range scans, splits and merges/redistribution on delete.
+   - Secondary indexes as separate B+ trees; the planner uses them for `=` and range
+     conditions.
+   - Serialization of rows into a compact binary format (varints or similar), overflow
+     pages for long TEXT values.
+7. **WAL and transactions**: changes are first written to the WAL (with checksums),
+   commit = fsync of the WAL, a checkpoint transfers pages into the main file. After a
+   simulated crash (process ends in the middle of a transaction, truncated WAL) the
+   database must be consistent when reopened: committed transactions present,
+   uncommitted ones gone. `ROLLBACK` discards everything.
+8. **Interfaces**: Python API (`db = minisql.connect(path)`, `db.execute(sql, params)`
+   with `?` placeholders, rows returned as tuples) and an interactive CLI
+   (`python -m minisql file.db`) with `.tables`, `.schema`, `.quit`.
+9. `EXPLAIN` prints the chosen execution plan as text.
 
-## Architekturvorgaben
-Paket `minisql/` mit klar getrennten Modulen, z. B. `lexer.py`, `parser.py`, `ast.py`,
-`planner.py`, `executor.py` (Volcano-/Iterator-Modell), `btree.py`, `pager.py`, `wal.py`,
-`record.py`, `catalog.py`, `cli.py`. Dokumentiere Seitenformat, Record-Format und
-WAL-Format in DESIGN.md.
+## Architecture Guidelines
+Package `minisql/` with clearly separated modules, e.g. `lexer.py`, `parser.py`, `ast.py`,
+`planner.py`, `executor.py` (Volcano/iterator model), `btree.py`, `pager.py`, `wal.py`,
+`record.py`, `catalog.py`, `cli.py`. Document the page format, record format and WAL
+format in DESIGN.md.
 
-## Teststrategie (pytest)
-- Unit-Tests für Lexer, Parser (inkl. Fehlerfälle), Record-Serialisierung, Pager.
-- B+-Baum-Tests: 10.000 zufällige Inserts/Deletes mit Abgleich gegen ein `dict`,
-  Invarianten-Check (Sortierung, Füllgrad, Höhe) nach jeder Operation in kleinen Läufen.
-- Crash-Tests: WAL abschneiden an zufälligen Positionen, Datenbank neu öffnen,
-  Konsistenz prüfen.
-- **Differenzielles Testen**: ein Generator erzeugt mit festem Seed mindestens 500
-  zufällige, gültige Queries (Selects mit Joins, WHERE, GROUP BY, ORDER BY, NULL-Werten,
-  Subqueries, sowie UPDATE/DELETE) auf identischen Daten in MiniSQL und `sqlite3`; die
-  Ergebnisse müssen übereinstimmen (bei fehlendem ORDER BY als Multimenge vergleichen,
-  Gleitkommazahlen mit Toleranz).
-- Insgesamt mindestens 150 Testfunktionen (parametrisierte Fälle zählen einzeln).
+## Test Strategy (pytest)
+- Unit tests for lexer, parser (including error cases), record serialization, pager.
+- B+ tree tests: 10,000 random inserts/deletes compared against a `dict`, invariant check
+  (ordering, fill factor, height) after every operation in small runs.
+- Crash tests: truncate the WAL at random positions, reopen the database, check
+  consistency.
+- **Differential testing**: a generator produces, with a fixed seed, at least 500 random
+  valid queries (selects with joins, WHERE, GROUP BY, ORDER BY, NULL values, subqueries,
+  plus UPDATE/DELETE) on identical data in MiniSQL and `sqlite3`; the results must match
+  (compare as multisets when there is no ORDER BY, floats with a tolerance).
+- At least 150 test functions in total (parametrized cases count individually).
 
-## Abnahmekriterien
-- `python3 -m pytest -q` ist vollständig grün, inklusive der 500+ Vergleichsqueries.
-- README.md mit Beispielen, DESIGN.md mit Architektur, PROGRESS.md vollständig abgehakt.
-- Ein Benchmark-Skript misst Inserts/s und Point-Lookups/s und dokumentiert die
-  Ergebnisse.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes completely, including the 500+ comparison queries.
+- README.md with examples, DESIGN.md with the architecture, PROGRESS.md fully checked off.
+- A benchmark script measures inserts/s and point lookups/s and documents the results.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

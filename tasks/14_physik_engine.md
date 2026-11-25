@@ -1,53 +1,51 @@
 ---
 topic: game_engine
+legacy_title: 2D-Physik-Engine mit Constraint-Solver und deterministischer Wiedergabe
 ---
-# 2D-Physik-Engine mit Constraint-Solver und deterministischer Wiedergabe
+# 2D Physics Engine with Constraint Solver and Deterministic Replay
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek) eine vollständige 2D-Starrkörper-
-Physik-Engine vergleichbar mit Box2D (konzeptionell, keine Codeübernahme), inklusive
-Kollisionserkennung, iterativem Constraint-Solver, Gelenken und deterministischer
-Simulation. Visualisierung über SVG-Ausgabe einzelner Frames. Umfang: mindestens
-8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only), a complete 2D rigid-body physics engine
+comparable to Box2D (conceptually, no code copied), including collision detection, an
+iterative constraint solver, joints and deterministic simulation. Visualization via SVG
+output of individual frames. Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Mathematik**: Vektoren, 2×2-Matrizen, Rotationen, Transformationen, AABBs,
-   numerisch robuste Hilfsfunktionen.
-2. **Formen**: Kreise, konvexe Polygone (aus Punktwolken per Konvexer Hülle),
-   Kapseln, Kantenketten für statisches Terrain; Masse, Schwerpunkt und
-   Trägheitsmoment aus Dichte.
-3. **Broadphase**: dynamischer AABB-Baum mit Rotation/Balancierung und Fat-AABBs;
-   alternativ Sweep-and-Prune; Paar-Management.
-4. **Narrowphase**: SAT für Polygone, GJK + EPA für allgemeine konvexe Formen,
-   Kontaktmannigfaltigkeiten mit Clipping (bis zu 2 Kontaktpunkte), Feature-IDs für
-   Warm Starting.
-5. **Solver**: Sequential Impulses mit Warm Starting, Akkumulation und Clamping,
-   Reibung (Coulomb), Restitution mit Schwellwert, Positionskorrektur (Baumgarte bzw.
-   Split Impulses), Sub-Stepping.
-6. **Gelenke**: Revolute (mit Limits und Motor), Prismatic, Distance (mit Feder),
-   Weld, Mouse-Joint, Rope.
-7. **Weitere Features**: Schlaf-/Aufwachsystem mit Inseln, Continuous Collision
-   Detection (Time of Impact) für schnelle Objekte, Sensoren/Trigger,
-   Kollisionsfilter (Kategorien/Masken), Raycasts und AABB-Abfragen,
-   Ereignis-Callbacks (Begin/End Contact).
-8. **Determinismus**: identische Eingaben liefern bitgenau identische Ergebnisse;
-   Speichern/Laden des kompletten Weltzustands; Replay-Datei.
-9. **Szenen und Visualisierung**: Pyramide aus 20 Ebenen, Kettenbrücke, Ragdoll,
-   Newton-Pendel, Fahrzeug mit Federung; Export von Frames als SVG und Animation als
-   SVG mit SMIL.
+## Functional Requirements
+1. **Math**: vectors, 2×2 matrices, rotations, transforms, AABBs, numerically robust
+   helper functions.
+2. **Shapes**: circles, convex polygons (from point clouds via convex hull), capsules,
+   edge chains for static terrain; mass, center of mass and moment of inertia from
+   density.
+3. **Broadphase**: dynamic AABB tree with rotations/balancing and fat AABBs;
+   alternatively sweep and prune; pair management.
+4. **Narrowphase**: SAT for polygons, GJK + EPA for general convex shapes, contact
+   manifolds with clipping (up to 2 contact points), feature IDs for warm starting.
+5. **Solver**: sequential impulses with warm starting, accumulation and clamping,
+   friction (Coulomb), restitution with a threshold, position correction (Baumgarte or
+   split impulses), sub-stepping.
+6. **Joints**: revolute (with limits and motor), prismatic, distance (with spring), weld,
+   mouse joint, rope.
+7. **More features**: sleep/wake system with islands, continuous collision detection
+   (time of impact) for fast objects, sensors/triggers, collision filtering
+   (categories/masks), ray casts and AABB queries, event callbacks (begin/end contact).
+8. **Determinism**: identical inputs yield bit-identical results; saving/loading the
+   complete world state; replay file.
+9. **Scenes and visualization**: pyramid with 20 levels, chain bridge, ragdoll, Newton's
+   cradle, vehicle with suspension; export of frames as SVG and of an animation as SVG
+   with SMIL.
 
-## Teststrategie (pytest)
-- Geometrie- und Kollisionstests mit analytisch bekannten Ergebnissen (Kreis-Kreis,
-  Polygon-Polygon in vielen Orientierungen; GJK-Abstand gegen Brute Force).
-- Physikalische Erhaltungsgrößen: Impulserhaltung bei elastischen Stößen,
-  Energieabnahme mit Reibung, freier Fall gegen analytische Lösung.
-- Stabilität: Pyramide aus 20 Ebenen bleibt 1000 Schritte stabil stehen und schläft ein.
-- Gelenk-Constraints werden innerhalb einer Toleranz eingehalten.
-- Determinismus: zwei Läufe und Save/Load-Lauf liefern identische Zustände.
-- Mindestens 220 Testfälle.
+## Test Strategy (pytest)
+- Geometry and collision tests with analytically known results (circle-circle,
+  polygon-polygon in many orientations; GJK distance against brute force).
+- Physical invariants: momentum conservation in elastic collisions, energy decrease with
+  friction, free fall against the analytical solution.
+- Stability: a pyramid with 20 levels stays standing for 1000 steps and falls asleep.
+- Joint constraints are satisfied within a tolerance.
+- Determinism: two runs and a save/load run produce identical states.
+- At least 220 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Leistungsmessungen (Körper pro Schritt) in DESIGN.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; performance measurements (bodies per step) in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

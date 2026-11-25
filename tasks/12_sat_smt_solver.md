@@ -1,51 +1,50 @@
 ---
 topic: algorithms
 spec_docs: false
+legacy_title: CDCL-SAT-Solver und SMT-Solver für lineare Arithmetik und Bitvektoren
 ---
-# CDCL-SAT-Solver und SMT-Solver für lineare Arithmetik und Bitvektoren
+# CDCL SAT Solver and SMT Solver for Linear Arithmetic and Bit-Vectors
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek) einen modernen CDCL-SAT-Solver und
-darauf einen SMT-Solver im DPLL(T)-Stil mit Theorien für lineare Arithmetik und
-Bitvektoren, inklusive SMT-LIB-2-Frontend. Umfang: mindestens 8 Stunden konzentrierter
-Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only), a modern CDCL SAT solver and on top of it
+a DPLL(T)-style SMT solver with theories for linear arithmetic and bit-vectors, including
+an SMT-LIB 2 frontend. Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **SAT-Kern**: DIMACS-Parser, Two-Watched-Literals, Unit Propagation, Konflikt-
-   analyse mit First-UIP, Klausellernen, nicht-chronologisches Backjumping, VSIDS bzw.
-   EVSIDS mit Heap, Phasen-Saving, Restarts (Luby und glucose-artig), Löschen gelernter
-   Klauseln nach LBD, Klauselminimierung.
-2. **Präprozessierung**: Subsumption, Self-Subsuming Resolution, Bounded Variable
-   Elimination, Pure Literals.
-3. **Inkrementelles Lösen** mit Assumptions und Ermittlung des Unsat-Kerns
-   (Final Conflict).
-4. **Beweise**: DRAT-Beweisausgabe für UNSAT und ein eigener, einfacher DRAT-Checker
-   (RUP-Prüfung) zur Verifikation; Modellprüfung für SAT.
-5. **Kodierungen**: Tseitin-Transformation, Kardinalitätsbedingungen (Sequential
-   Counter, Totalizer), Pseudo-Boolean-Ungleichungen.
-6. **SMT (DPLL(T))**: Theorie-Schnittstelle mit Propagation und Konflikterklärung;
-   **Lineare reelle Arithmetik** mit dem Simplex-Verfahren nach Dutertre/de Moura
-   (Bounds, Pivotieren, Erklärungen), **lineare ganzzahlige Arithmetik** per
-   Branch-and-Bound; **Bitvektoren** per Bit-Blasting (Addition, Multiplikation,
-   Vergleiche, Shifts, Extrakt/Konkatenation).
-7. **SMT-LIB-2-Frontend**: `declare-fun`, `define-fun`, `assert`, `check-sat`,
-   `get-model`, `push`/`pop`, `set-logic` (QF_LRA, QF_LIA, QF_BV, QF_UF-Teilmenge).
-8. **Anwendungen**: Sudoku- und N-Damen-Löser, Graphfärbung, Programmverifikation einer
-   kleinen Schleife per Bounded Model Checking.
+## Functional Requirements
+1. **SAT core**: DIMACS parser, two watched literals, unit propagation, conflict analysis
+   with first UIP, clause learning, non-chronological backjumping, VSIDS or EVSIDS with a
+   heap, phase saving, restarts (Luby and glucose-style), deletion of learned clauses by
+   LBD, clause minimization.
+2. **Preprocessing**: subsumption, self-subsuming resolution, bounded variable
+   elimination, pure literals.
+3. **Incremental solving** with assumptions and extraction of the unsat core (final
+   conflict).
+4. **Proofs**: DRAT proof output for UNSAT and your own simple DRAT checker (RUP check) for
+   verification; model check for SAT.
+5. **Encodings**: Tseitin transformation, cardinality constraints (sequential counter,
+   totalizer), pseudo-Boolean inequalities.
+6. **SMT (DPLL(T))**: theory interface with propagation and conflict explanation; **linear
+   real arithmetic** with the simplex method per Dutertre/de Moura (bounds, pivoting,
+   explanations), **linear integer arithmetic** via branch and bound; **bit-vectors** via
+   bit-blasting (addition, multiplication, comparisons, shifts, extract/concat).
+7. **SMT-LIB 2 frontend**: `declare-fun`, `define-fun`, `assert`, `check-sat`,
+   `get-model`, `push`/`pop`, `set-logic` (subsets of QF_LRA, QF_LIA, QF_BV, QF_UF).
+8. **Applications**: Sudoku and N-Queens solvers, graph coloring, verification of a small
+   loop via bounded model checking.
 
-## Teststrategie (pytest)
-- Differenztests gegen einen einfachen Brute-Force-Solver für 2000 zufällige kleine
-  Formeln (3-SAT nahe der Phasenübergangsschwelle, fester Seed).
-- Jede UNSAT-Antwort wird mit dem DRAT-Checker verifiziert, jede SAT-Antwort per Modell.
-- Bekannte Benchmarks (z. B. Pigeonhole, zufällige 3-SAT mit 150 Variablen) innerhalb
-  von Zeitlimits; Laufzeiten dokumentieren.
-- Simplex: Tests gegen exakte Lösungen mit `fractions.Fraction`; Bitvektor-Ergebnisse
-  gegen direkte Python-Auswertung.
-- SMT-LIB-Skripte mit erwarteten Ausgaben (mindestens 40 Dateien).
-- Mindestens 250 Testfälle.
+## Test Strategy (pytest)
+- Differential tests against a simple brute-force solver for 2000 random small formulas
+  (3-SAT near the phase transition, fixed seed).
+- Every UNSAT answer is verified with the DRAT checker, every SAT answer via its model.
+- Known benchmarks (e.g. pigeonhole, random 3-SAT with 150 variables) within time limits;
+  document run times.
+- Simplex: tests against exact solutions with `fractions.Fraction`; bit-vector results
+  against direct Python evaluation.
+- SMT-LIB scripts with expected outputs (at least 40 files).
+- At least 250 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; DESIGN.md mit Heuristiken und Messungen.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; DESIGN.md with heuristics and measurements.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

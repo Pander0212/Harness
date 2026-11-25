@@ -1,51 +1,52 @@
 ---
 topic: database
+legacy_title: LSM-Tree-Speicher-Engine mit MVCC und Crash-Recovery
 ---
-# LSM-Tree-Speicher-Engine mit MVCC und Crash-Recovery
+# LSM-Tree Storage Engine with MVCC and Crash Recovery
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek) eine eingebettete Key-Value-
-Speicher-Engine nach dem Log-Structured-Merge-Prinzip (vergleichbar mit LevelDB/RocksDB)
-mit Snapshots, MVCC-Transaktionen und garantierter Crash-Konsistenz. Umfang: mindestens
-8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only), an embedded key-value storage engine
+based on the log-structured merge principle (comparable to LevelDB/RocksDB) with
+snapshots, MVCC transactions and guaranteed crash consistency. Scope: at least 8 hours of
+focused work.
 
-## Funktionale Anforderungen
-1. **Write-Ahead-Log** mit Record-Format (Blöcke, Fragmentierung über Blockgrenzen,
-   CRC32C selbst implementiert), Gruppen-Commit, konfigurierbare Sync-Politik.
-2. **Memtable** als Skip-List mit Sequenznummern und Löschmarkern (Tombstones);
-   unveränderliche Memtables während des Flushes.
-3. **SSTables**: Datenblöcke mit Präfix-Kompression und Restart-Points, Index-Block,
-   Filterblock mit **Bloom-Filter** (konfigurierbare Bits pro Schlüssel), Footer mit
-   magischer Zahl, optionale Kompression (zlib) pro Block, Prüfsummen.
-4. **Versionsverwaltung**: MANIFEST-Datei mit Versions-Edits, CURRENT-Datei,
-   atomarer Wechsel, Wiederherstellung nach Absturz.
-5. **Compaction**: Leveled Compaction (L0 überlappend, L1+ disjunkt) mit Score-
-   Berechnung, Size-tiered als Alternative; Entfernen veralteter Versionen unter
-   Beachtung offener Snapshots; Hintergrund-Thread mit sauberem Stopp.
-6. **Iteratoren**: Merging-Iterator über Memtables und alle Levels, vorwärts und
-   rückwärts, `seek`, Bereichsabfragen, Präfix-Scans.
-7. **MVCC und Transaktionen**: Snapshots (konsistente Lesesicht), optimistische
-   Transaktionen mit Konflikterkennung beim Commit (Snapshot Isolation), WriteBatch.
-8. **Block-Cache** (LRU mit Kapazität in Bytes) und Table-Cache für offene Dateien.
-9. **Werkzeuge**: `dump` für SSTables und MANIFEST, `check` zur Konsistenzprüfung,
-   Statistiken (Write/Read-Amplification, Bloom-Treffer).
-10. **Benchmark** im Stil von `db_bench`: fillseq, fillrandom, readrandom, readseq,
-    overwrite, deleterandom mit Ergebnissen in DESIGN.md.
+## Functional Requirements
+1. **Write-ahead log** with a record format (blocks, fragmentation across block
+   boundaries, CRC32C implemented yourself), group commit, configurable sync policy.
+2. **Memtable** as a skip list with sequence numbers and deletion markers (tombstones);
+   immutable memtables during flush.
+3. **SSTables**: data blocks with prefix compression and restart points, index block,
+   filter block with a **Bloom filter** (configurable bits per key), footer with a magic
+   number, optional compression (zlib) per block, checksums.
+4. **Version management**: MANIFEST file with version edits, CURRENT file, atomic
+   switch, recovery after a crash.
+5. **Compaction**: leveled compaction (L0 overlapping, L1+ disjoint) with score
+   computation, size-tiered as an alternative; dropping obsolete versions while respecting
+   open snapshots; background thread with clean shutdown.
+6. **Iterators**: merging iterator over memtables and all levels, forward and backward,
+   `seek`, range queries, prefix scans.
+7. **MVCC and transactions**: snapshots (consistent read view), optimistic transactions
+   with conflict detection at commit (snapshot isolation), WriteBatch.
+8. **Block cache** (LRU with capacity in bytes) and a table cache for open files.
+9. **Tools**: `dump` for SSTables and the MANIFEST, `check` for consistency checks,
+   statistics (write/read amplification, Bloom filter hits).
+10. **Benchmark** in the style of `db_bench`: fillseq, fillrandom, readrandom, readseq,
+    overwrite, deleterandom with results in DESIGN.md.
 
-## Teststrategie (pytest)
-- Unit-Tests für Skip-List, Bloom-Filter (False-Positive-Rate statistisch prüfen),
-  Blockformat, CRC32C gegen Referenzwerte.
-- Modellbasierter Test: 50.000 zufällige Operationen (put/delete/get/scan/Snapshot/
-  Transaktion) gegen ein einfaches `dict`-Modell, mit Compactions zwischendurch.
-- **Crash-Tests**: Prozess wird an zufälligen Stellen (simulierte Abstürze durch
-  abgeschnittene Dateien, fehlende fsyncs) unterbrochen; nach dem Wiederöffnen sind alle
-  bestätigten Schreibvorgänge vorhanden und die Datenbank ist konsistent.
-- Nebenläufigkeit: mehrere Leser-Threads während Schreiblast und Compaction.
-- Mindestens 250 Testfälle.
+## Test Strategy (pytest)
+- Unit tests for skip list, Bloom filter (check the false-positive rate statistically),
+  block format, CRC32C against reference values.
+- Model-based test: 50,000 random operations (put/delete/get/scan/snapshot/transaction)
+  against a simple `dict` model, with compactions in between.
+- **Crash tests**: the process is interrupted at random points (simulated crashes via
+  truncated files, missing fsyncs); after reopening, all acknowledged writes are present
+  and the database is consistent.
+- Concurrency: several reader threads during write load and compaction.
+- At least 250 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Dateiformate vollständig in DESIGN.md dokumentiert;
-  Benchmark-Ergebnisse dokumentiert.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; file formats fully documented in DESIGN.md; benchmark
+  results documented.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

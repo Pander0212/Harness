@@ -1,55 +1,53 @@
 ---
 topic: devtools
 mode: swarm
+legacy_title: Build-System mit Remote-Cache und Paketmanager mit PubGrub-Resolver
 ---
-# Build-System mit Remote-Cache und Paketmanager mit PubGrub-Resolver
+# Build System with Remote Cache and Package Manager with a PubGrub Resolver
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek) zwei zusammenspielende
-Entwicklerwerkzeuge: ein inkrementelles, paralleles Build-System (konzeptionell wie
-Bazel/Ninja) und einen Paketmanager mit dem PubGrub-Abhängigkeitsauflöser. Gedacht für
-den **Schwarm-Modus**. Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only), two cooperating developer tools: an
+incremental, parallel build system (conceptually like Bazel/Ninja) and a package manager
+with the PubGrub dependency resolver. Meant for **swarm mode**. Scope: at least 8 hours
+of focused work.
 
-## Funktionale Anforderungen – Build-System
-1. **Build-Beschreibung** in einer eigenen, sicheren Konfigurationssprache (Parser,
-   Variablen, Funktionen, Listen, Glob-Muster, Includes) mit Regeln, Zielen und
-   Abhängigkeiten.
-2. **Abhängigkeitsgraph**: Zyklenerkennung mit verständlicher Fehlermeldung (Pfad),
-   topologische Planung, Ziele nach Muster auswählen.
-3. **Inkrementalität**: Inhalts-Hashes von Eingaben, Befehlszeile und Umgebung;
-   Aktionsschlüssel; Datenbank des letzten Builds; nur veraltete Aktionen laufen;
-   „Early Cutoff“, wenn eine Ausgabe sich nicht ändert.
-4. **Parallele Ausführung** mit Worker-Pool, Limit für Ressourcen (CPU, Speicher-Token),
-   Abbruch bei Fehler oder `--keep-going`, Fortschrittsanzeige, kritischer Pfad.
-5. **Cache**: lokaler inhaltsadressierter Cache und **Remote-Cache** über HTTP (eigener
-   kleiner Cache-Server mit `http.server`), Prüfung von Hashes, Bereinigung (LRU).
-6. **Sandboxing light**: Aktionen laufen in temporären Verzeichnissen nur mit
-   deklarierten Eingaben; nicht deklarierte Abhängigkeiten werden erkannt.
-7. **Werkzeuge**: `query` (Abhängigkeiten, umgekehrte Abhängigkeiten), `graph`
-   (DOT-Ausgabe), `clean`, `explain` (warum wurde neu gebaut?).
+## Functional Requirements – Build System
+1. **Build description** in your own safe configuration language (parser, variables,
+   functions, lists, glob patterns, includes) with rules, targets and dependencies.
+2. **Dependency graph**: cycle detection with an understandable error message (the
+   path), topological scheduling, selecting targets by pattern.
+3. **Incrementality**: content hashes of inputs, command line and environment; action
+   keys; a database of the last build; only outdated actions run; "early cutoff" when an
+   output does not change.
+4. **Parallel execution** with a worker pool, resource limits (CPU, memory tokens), abort
+   on error or `--keep-going`, progress display, critical path.
+5. **Cache**: local content-addressed cache and a **remote cache** over HTTP (your own
+   small cache server using `http.server`), hash verification, eviction (LRU).
+6. **Light sandboxing**: actions run in temporary directories with only their declared
+   inputs; undeclared dependencies are detected.
+7. **Tools**: `query` (dependencies, reverse dependencies), `graph` (DOT output),
+   `clean`, `explain` (why was this rebuilt?).
 
-## Funktionale Anforderungen – Paketmanager
-8. **Paketformat** (Metadaten, semantische Versionen mit Vorabversionen, Bereichs-
-   syntax wie `^1.2`, `~2.0`, `>=1,<3`), lokales Registry-Verzeichnis und
-   HTTP-Registry.
-9. **PubGrub-Resolver**: Inkompatibilitäten, Unit Propagation, Konfliktauflösung mit
-   Lernen, **menschenlesbare Erklärung** bei Unlösbarkeit (Ableitungsbaum wie im
-   PubGrub-Artikel), Versionspräferenz (neueste zuerst, Lockfile-Präferenz).
-10. **Lockfile**, Installation in ein Projektverzeichnis, Integritätsprüfung (SHA-256),
+## Functional Requirements – Package Manager
+8. **Package format** (metadata, semantic versions with pre-releases, range syntax like
+   `^1.2`, `~2.0`, `>=1,<3`), a local registry directory and an HTTP registry.
+9. **PubGrub resolver**: incompatibilities, unit propagation, conflict resolution with
+   learning, a **human-readable explanation** when unsolvable (derivation tree as in the
+   PubGrub article), version preference (newest first, lockfile preference).
+10. **Lockfile**, installation into a project directory, integrity checks (SHA-256),
     `add`/`remove`/`update`/`tree`/`why`.
 
-## Teststrategie (pytest)
-- Build: Szenarien mit Projekten aus Dutzenden Zielen (z. B. Codegenerierung,
-  „Kompilieren“ per Python-Skripten, Archivieren); nach Änderung genau einer Datei laufen
-  genau die erwarteten Aktionen; Cache-Treffer lokal und remote; parallele Läufe sind
-  deterministisch.
-- Resolver: alle Beispiele aus der PubGrub-Dokumentation mit erwarteten Lösungen und
-  Fehlererklärungen; 500 zufällig generierte Registries gegen einen Brute-Force-Löser
-  (fester Seed).
-- Mindestens 300 Testfälle.
+## Test Strategy (pytest)
+- Build: scenarios with projects of dozens of targets (e.g. code generation, "compiling"
+  via Python scripts, archiving); after changing exactly one file, exactly the expected
+  actions run; cache hits locally and remotely; parallel runs are deterministic.
+- Resolver: all examples from the PubGrub documentation with expected solutions and error
+  explanations; 500 randomly generated registries against a brute-force solver (fixed
+  seed).
+- At least 300 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Benutzerhandbuch in docs/, Architektur in DESIGN.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; user manual in docs/, architecture in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

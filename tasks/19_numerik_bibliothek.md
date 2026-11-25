@@ -1,54 +1,55 @@
 ---
 topic: numerics
 spec_docs: false
+legacy_title: "Numerik-Bibliothek: Lineare Algebra, Eigenwerte, ODEs, FFT und Optimierung"
 ---
-# Numerik-Bibliothek: Lineare Algebra, Eigenwerte, ODEs, FFT und Optimierung
+# Numerics Library: Linear Algebra, Eigenvalues, ODEs, FFT and Optimization
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek, insbesondere `math`, `cmath`,
-`fractions`) eine numerische Bibliothek mit dichten und dünnbesetzten Matrizen,
-Zerlegungen, Eigenwertverfahren, ODE-Lösern, FFT, Interpolation, Quadratur und
-Optimierung – numerisch sorgfältig implementiert und gegen analytische Lösungen
-geprüft. Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only, in particular `math`, `cmath`,
+`fractions`), a numerics library with dense and sparse matrices, decompositions,
+eigenvalue methods, ODE solvers, FFT, interpolation, quadrature and optimization –
+implemented with numerical care and checked against analytical solutions. Scope: at least
+8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Dichte Matrizen/Vektoren** mit Operatorüberladung, Broadcasting-Grundformen,
-   Normen, Konditionszahl-Schätzung; exakte Variante mit `Fraction`.
-2. **Zerlegungen**: LU mit Spaltenpivotisierung, Cholesky, LDLᵀ, QR (Householder und
-   Givens), **SVD** (Golub-Kahan-Bidiagonalisierung + implizites QR), Lösen linearer
-   Systeme, Determinante, Inverse, Pseudoinverse, Least Squares.
-3. **Eigenwerte**: Potenzmethode, inverse Iteration, Hessenberg-Reduktion,
-   QR-Algorithmus mit Wilkinson-Shifts für allgemeine und symmetrische Matrizen
-   (Jacobi-Verfahren als Alternative), komplexe Eigenwerte.
-4. **Dünnbesetzte Matrizen**: COO, CSR, CSC mit Konvertierung; Matrix-Vektor-Produkt;
-   iterative Löser CG, BiCGSTAB, GMRES(m) mit Jacobi- und ILU(0)-Vorkonditionierung.
-5. **Nichtlineare Gleichungen**: Bisektion, Brent, Newton (auch mehrdimensional mit
-   numerischer Jacobi-Matrix), Broyden.
-6. **Interpolation und Approximation**: Lagrange/Newton, natürliche und eingespannte
-   kubische Splines, Chebyshev-Approximation, Polynom-Fit.
-7. **Quadratur**: adaptive Simpson, Gauß-Legendre (Knoten berechnet), Romberg,
-   Gauß-Kronrod mit Fehlerschätzung, uneigentliche Integrale.
-8. **ODEs**: Euler, RK4, adaptive Dormand-Prince (RK45) mit dichter Ausgabe,
-   steife Löser (implizites Euler, BDF2, Rosenbrock), Ereigniserkennung.
-9. **FFT**: Radix-2 Cooley-Tukey, Bluestein für beliebige Längen, reelle FFT,
-   Faltung, inverse FFT, 2D-FFT.
-10. **Optimierung**: Gradientenabstieg mit Liniensuche (Wolfe), BFGS und L-BFGS,
-    Nelder-Mead, Simplex-Verfahren für lineare Programme (Zweiphasen, Bland-Regel).
+## Functional Requirements
+1. **Dense matrices/vectors** with operator overloading, basic broadcasting, norms,
+   condition number estimation; an exact variant with `Fraction`.
+2. **Decompositions**: LU with partial pivoting, Cholesky, LDLᵀ, QR (Householder and
+   Givens), **SVD** (Golub-Kahan bidiagonalization + implicit QR), solving linear
+   systems, determinant, inverse, pseudoinverse, least squares.
+3. **Eigenvalues**: power method, inverse iteration, Hessenberg reduction, QR algorithm
+   with Wilkinson shifts for general and symmetric matrices (Jacobi method as an
+   alternative), complex eigenvalues.
+4. **Sparse matrices**: COO, CSR, CSC with conversions; matrix-vector product; iterative
+   solvers CG, BiCGSTAB, GMRES(m) with Jacobi and ILU(0) preconditioning.
+5. **Nonlinear equations**: bisection, Brent, Newton (also multi-dimensional with a
+   numerical Jacobian), Broyden.
+6. **Interpolation and approximation**: Lagrange/Newton, natural and clamped cubic
+   splines, Chebyshev approximation, polynomial fitting.
+7. **Quadrature**: adaptive Simpson, Gauss-Legendre (nodes computed), Romberg,
+   Gauss-Kronrod with error estimate, improper integrals.
+8. **ODEs**: Euler, RK4, adaptive Dormand-Prince (RK45) with dense output, stiff solvers
+   (implicit Euler, BDF2, Rosenbrock), event detection.
+9. **FFT**: radix-2 Cooley-Tukey, Bluestein for arbitrary lengths, real FFT,
+   convolution, inverse FFT, 2D FFT.
+10. **Optimization**: gradient descent with line search (Wolfe), BFGS and L-BFGS,
+    Nelder-Mead, simplex method for linear programs (two-phase, Bland's rule).
 
-## Teststrategie (pytest)
-- Jede Zerlegung: Rekonstruktionsfehler ‖A − Produkt‖ unter Toleranz für 200 zufällige
-  Matrizen (fester Seed), inklusive schlecht konditionierter (Hilbert-Matrizen) mit
-  dokumentierten Toleranzen.
-- Eigenwerte gegen bekannte Matrizen (Begleitmatrizen von Polynomen, symmetrische
-  Tridiagonalmatrizen mit geschlossenen Lösungen).
-- ODE-Löser gegen analytische Lösungen; gemessene Konvergenzordnung entspricht der
-  Theorie (Log-Log-Steigung).
-- FFT gegen naive DFT; Parseval; Quadratur gegen bekannte Integrale.
-- Optimierung: Rosenbrock, quadratische Formen, LP-Beispiele mit bekannten Optima.
-- Mindestens 300 Testfälle.
+## Test Strategy (pytest)
+- Every decomposition: reconstruction error ‖A − product‖ below tolerance for 200 random
+  matrices (fixed seed), including ill-conditioned ones (Hilbert matrices) with documented
+  tolerances.
+- Eigenvalues against known matrices (companion matrices of polynomials, symmetric
+  tridiagonal matrices with closed-form solutions).
+- ODE solvers against analytical solutions; the measured order of convergence matches
+  theory (log-log slope).
+- FFT against a naive DFT; Parseval; quadrature against known integrals.
+- Optimization: Rosenbrock, quadratic forms, LP examples with known optima.
+- At least 300 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Genauigkeits- und Laufzeitmessungen in DESIGN.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; accuracy and run-time measurements in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

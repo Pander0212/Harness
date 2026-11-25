@@ -10,7 +10,7 @@ from agent import Agent
 from fakes import FakeAPIError, resp, tool, FakeClient
 from swarm import scopes_overlap
 
-SUB_MARK = "Subagent in einem autonomen"
+SUB_MARK = "You are a subagent"
 
 
 def spawn(**args):
@@ -26,7 +26,7 @@ def is_sub(kwargs):
 
 
 def sub_name(kwargs):
-    return re.search(r"# Arbeitspaket: (\S+)", kwargs["messages"][1]["content"]).group(1)
+    return re.search(r"# Work package: (\S+)", kwargs["messages"][1]["content"]).group(1)
 
 
 def make_agent(cfg, client, task=None, **kw):
@@ -104,7 +104,7 @@ def test_swarm_runs_in_parallel(cfg):
     a = make_agent(cfg, client)
     assert a.run()["outcome"] == "finished"
     report = [m for m in client.requests[-1]["messages"] if m["role"] == "tool"][0]["content"]
-    assert "3 Pakete, 3 erfolgreich" in report
+    assert "3 packages, 3 successful" in report
     for n in "abc":
         assert os.path.exists(os.path.join(a.workspace, n, "out.txt"))
     assert a.stats["subagents"] == 3
@@ -134,10 +134,10 @@ def test_swarm_rejects_overlapping_or_missing_scopes(cfg):
     a = make_agent(cfg, client)
     a.run()
     res = [m["content"] for m in client.requests[-1]["messages"] if m["role"] == "tool"]
-    assert "überschneiden" in res[0]
-    assert "keinen scope" in res[1]
-    assert "höchstens 4" in res[2]
-    assert "scope" in res[3] and "Fehler" in res[3]
+    assert "overlap" in res[0]
+    assert "has no scope" in res[1]
+    assert "at most 4" in res[2]
+    assert "scope" in res[3] and "Error" in res[3]
     assert a.stats["subagents"] == 0
 
 
@@ -156,7 +156,7 @@ def test_scope_enforced_for_write(cfg):
     a.run()
     sub_req = [r for r in client.requests if is_sub(r)][-1]
     res = [m["content"] for m in sub_req["messages"] if m["role"] == "tool"][0]
-    assert "außerhalb deines Schreibbereichs" in res
+    assert "outside your write scope" in res
     assert not os.path.exists(os.path.join(a.workspace, "fremd"))
 
 
@@ -234,11 +234,11 @@ def test_swarm_mode_prompt_and_disable(cfg):
     client = FakeClient([tool("finish", summary="ok")])
     make_agent(cfg, client, task=task).run()
     sysmsg = client.requests[0]["messages"][0]["content"]
-    assert "SCHWARM-KOORDINATOR" in sysmsg and "SUBAGENTEN UND SCHWARM" in sysmsg
+    assert "SWARM COORDINATOR" in sysmsg and "SUBAGENTS AND SWARM" in sysmsg
     cfg.data["subagents_enabled"] = False
     client = FakeClient([tool("finish", summary="ok")])
     make_agent(cfg, client, task={"id": "s2", "title": "P", "prompt": "x"}).run()
-    assert "SUBAGENTEN" not in client.requests[0]["messages"][0]["content"]
+    assert "SUBAGENTS" not in client.requests[0]["messages"][0]["content"]
     assert "swarm" not in {t["function"]["name"] for t in client.requests[0]["tools"]}
 
 

@@ -1,66 +1,70 @@
-# Interpreter für die Programmiersprache "Kiesel"
+---
+legacy_title: Interpreter für die Programmiersprache "Kiesel"
+---
+# Interpreter for the Programming Language "Pebble"
 
-## Ziel
-Entwirf und implementiere in reinem Python 3 (nur Standardbibliothek) die statisch
-typisierte Skriptsprache **Kiesel** mit vollständiger Toolchain: Lexer, Parser,
-Typchecker, Compiler nach Bytecode, Bytecode-VM mit eigenem Garbage Collector,
-Standardbibliothek und REPL.
+## Goal
+Design and implement, in pure Python 3 (standard library only), the statically typed
+scripting language **Pebble** with a complete toolchain: lexer, parser, type checker,
+compiler to bytecode, bytecode VM with its own garbage collector, standard library and
+REPL.
 
-## Sprachumfang
-1. **Typen**: `int` (beliebige Größe), `float`, `bool`, `str`, `nil`, Arrays `[T]`,
-   Maps `{K: V}`, Funktionstypen `fn(A, B) -> C`, benutzerdefinierte `struct`s und
-   `enum`s mit Payload (algebraische Datentypen), optionale Typen `T?`.
-2. **Deklarationen**: `let` (unveränderlich), `var` (veränderlich), Funktionen mit
-   Typannotationen, lokale Typinferenz für Variablen, Closures mit Capture by
-   reference, rekursive und gegenseitig rekursive Funktionen.
-3. **Kontrollfluss**: `if/else` als Ausdruck, `while`, `for x in range/array/map`,
-   `break`, `continue`, `return`, `match` mit Mustern (Literale, Enum-Varianten mit
-   Destrukturierung, Wildcard `_`, Guards) und Vollständigkeitsprüfung.
-4. **Generics** für Funktionen (`fn map<T, U>(xs: [T], f: fn(T) -> U) -> [U]`) mit
-   Typinferenz an der Aufrufstelle.
-5. **Fehlerbehandlung**: `Result`-ähnliches eingebautes Enum und `?`-Operator;
-   Laufzeitfehler (Division durch 0, Index außerhalb) mit Stacktrace und Zeilennummer.
-6. **Module**: `import "datei.ks"` mit Namensräumen und Zykluserkennung.
+## Language Scope
+1. **Types**: `int` (arbitrary size), `float`, `bool`, `str`, `nil`, arrays `[T]`, maps
+   `{K: V}`, function types `fn(A, B) -> C`, user-defined `struct`s and `enum`s with
+   payloads (algebraic data types), optional types `T?`.
+2. **Declarations**: `let` (immutable), `var` (mutable), functions with type annotations,
+   local type inference for variables, closures with capture by reference, recursive and
+   mutually recursive functions.
+3. **Control flow**: `if/else` as an expression, `while`, `for x in range/array/map`,
+   `break`, `continue`, `return`, `match` with patterns (literals, enum variants with
+   destructuring, wildcard `_`, guards) and exhaustiveness checking.
+4. **Generics** for functions (`fn map<T, U>(xs: [T], f: fn(T) -> U) -> [U]`) with type
+   inference at the call site.
+5. **Error handling**: a built-in `Result`-like enum and the `?` operator; runtime errors
+   (division by zero, index out of bounds) with a stack trace and line number.
+6. **Modules**: `import "file.pb"` with namespaces and cycle detection.
 
-## Komponenten
-1. **Lexer** mit Positionsangaben, Strings mit Escapes und Interpolation
-   (`"Hallo {name}"`), verschachtelte Kommentare.
-2. **Parser** (Pratt-Parser für Ausdrücke) erzeugt einen typisierten AST; aussagekräftige
-   Fehlermeldungen mit Quelltextausschnitt und Markierung (`^^^`), Fehlererholung, damit
-   mehrere Fehler pro Lauf gemeldet werden.
-3. **Typchecker**: Scopes, Inferenz (Hindley-Milner-artig für Generics/Lambdas genügt in
-   vereinfachter Form), Prüfung von Mutabilität, Rückgabetypen aller Pfade,
-   Vollständigkeit von `match`.
-4. **Compiler** nach Stack-Bytecode: Konstantenpool, Sprünge, lokale Slots, Upvalues
-   für Closures; einfache Optimierungen (Konstantenfaltung, Entfernen toten Codes).
-   Ein Disassembler gibt Bytecode lesbar aus.
-5. **VM**: Aufrufstack mit Frames, Tail-Call-Optimierung, Heap-Objekte (Strings,
-   Arrays, Maps, Structs, Closures) in einem eigenen Heap-Modell.
-6. **Garbage Collector**: Mark-and-Sweep (optional generational) über den eigenen Heap,
-   Wurzeln = Stack, Globals, offene Upvalues; Statistiken (Anzahl Sammlungen, befreite
-   Objekte); Stresstest-Modus, der bei jeder Allokation sammelt.
-7. **Standardbibliothek**: `print`, `len`, `push/pop`, `keys/values`, String-Funktionen
-   (`split`, `join`, `trim`, `replace`, `find`), Mathematik, `sort` mit Vergleichsfunktion,
-   `map/filter/reduce`, Datei lesen/schreiben, `time`.
-8. **REPL** (`python -m kiesel`) mit mehrzeiliger Eingabe, Beibehaltung von Definitionen
-   zwischen Eingaben, `:type ausdruck`, `:dis funktion`, `:gc`.
-9. **Beispielprogramme** in `examples/`: N-Queens, JSON-Parser in Kiesel, Brainfuck-
-   Interpreter in Kiesel, Primzahlsieb, Binärbaum mit Enums.
+## Components
+1. **Lexer** with positions, strings with escapes and interpolation (`"Hello {name}"`),
+   nested comments.
+2. **Parser** (Pratt parser for expressions) produces a typed AST; meaningful error
+   messages with a source excerpt and marker (`^^^`), error recovery so that several
+   errors are reported per run.
+3. **Type checker**: scopes, inference (Hindley-Milner-style for generics/lambdas in a
+   simplified form is sufficient), checking of mutability, return types on all paths,
+   exhaustiveness of `match`.
+4. **Compiler** to stack bytecode: constant pool, jumps, local slots, upvalues for
+   closures; simple optimizations (constant folding, dead code elimination). A
+   disassembler prints bytecode in readable form.
+5. **VM**: call stack with frames, tail-call optimization, heap objects (strings, arrays,
+   maps, structs, closures) in its own heap model.
+6. **Garbage collector**: mark-and-sweep (optionally generational) over the own heap,
+   roots = stack, globals, open upvalues; statistics (number of collections, freed
+   objects); a stress mode that collects on every allocation.
+7. **Standard library**: `print`, `len`, `push/pop`, `keys/values`, string functions
+   (`split`, `join`, `trim`, `replace`, `find`), math, `sort` with a comparison function,
+   `map/filter/reduce`, reading/writing files, `time`.
+8. **REPL** (`python -m pebble`) with multi-line input, definitions kept between inputs,
+   `:type expression`, `:dis function`, `:gc`.
+9. **Example programs** in `examples/`: N-Queens, a JSON parser written in Pebble, a
+   Brainfuck interpreter written in Pebble, prime sieve, binary tree with enums.
 
-## Teststrategie (pytest)
-- Lexer-/Parser-Tests inkl. Fehlerfälle und Fehlermeldungsformat.
-- Typchecker: mindestens 60 positive und negative Fälle.
-- Golden-Tests: jedes Programm in `tests/programs/*.ks` hat eine erwartete Ausgabe
-  `*.out` (mindestens 40 Programme).
-- GC-Tests: Stressmodus über alle Golden-Tests muss dieselben Ausgaben liefern; nach
-  Programmende sind alle unerreichbaren Objekte freigegeben.
-- Property-Tests: zufällig generierte arithmetische Ausdrücke werden mit Pythons
-  Auswertung verglichen (fester Seed, 300 Fälle).
-- Insgesamt mindestens 200 Testfälle.
+## Test Strategy (pytest)
+- Lexer/parser tests including error cases and the error message format.
+- Type checker: at least 60 positive and negative cases.
+- Golden tests: every program in `tests/programs/*.pb` has an expected output `*.out`
+  (at least 40 programs).
+- GC tests: stress mode over all golden tests must produce the same outputs; after the
+  program ends all unreachable objects are freed.
+- Property tests: randomly generated arithmetic expressions are compared with Python's
+  evaluation (fixed seed, 300 cases).
+- At least 200 test cases in total.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` ist grün, alle Beispielprogramme laufen.
-- Sprachreferenz in `docs/LANGUAGE.md`, Architektur in DESIGN.md, PROGRESS.md aktuell.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes, all example programs run.
+- Language reference in `docs/LANGUAGE.md`, architecture in DESIGN.md, PROGRESS.md up to
+  date.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

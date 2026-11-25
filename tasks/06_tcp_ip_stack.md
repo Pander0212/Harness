@@ -1,58 +1,59 @@
 ---
 topic: network
 spec_docs: true
+legacy_title: TCP/IP-Stack im Userspace mit Netzwerksimulator
 ---
-# TCP/IP-Stack im Userspace mit Netzwerksimulator
+# User-Space TCP/IP Stack with Network Simulator
 
-## Ziel
-Implementiere in reinem Python 3 (nur Standardbibliothek) einen vollständigen
-TCP/IP-Stack, der über einem eigenen, deterministischen Netzwerksimulator läuft. Der
-Simulator bildet Verbindungen mit Latenz, Bandbreite, Paketverlust, Duplikaten,
-Umordnung und Bitfehlern nach. Mehrere simulierte Hosts und Router tauschen echte,
-byte-genau kodierte Pakete aus. Umfang: ein großes Projekt für mindestens 8 Stunden
-konzentrierter Arbeit.
+## Goal
+Implement, in pure Python 3 (standard library only), a complete TCP/IP stack that runs
+on top of your own deterministic network simulator. The simulator models links with
+latency, bandwidth, packet loss, duplicates, reordering and bit errors. Several simulated
+hosts and routers exchange real, byte-exact encoded packets. Scope: a large project for at
+least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Simulator** (`netsim/`): diskrete Ereignissimulation mit virtueller Uhr, Links mit
-   konfigurierbarer Latenz/Bandbreite/Queue-Größe (Drop-Tail und RED), Verlust- und
-   Störmodelle mit Seed, Mitschnitt im pcap-Format (von Wireshark lesbar).
-2. **Ethernet** (Frames, MAC-Adressen, Broadcast), **Switch** mit MAC-Learning und Aging.
-3. **ARP** mit Cache, Timeouts, Gratuitous ARP, Warteschlange für unaufgelöste Pakete.
-4. **IPv4**: Header-Kodierung inkl. Prüfsumme, TTL, Fragmentierung und Reassemblierung
-   (mit Timeouts, überlappenden Fragmenten), Routing-Tabelle mit Longest-Prefix-Match,
-   Router mit mehreren Interfaces.
-5. **ICMP**: Echo (ping mit RTT-Statistik), Destination Unreachable, Time Exceeded,
-   `traceroute`-Werkzeug.
-6. **UDP** mit Pseudo-Header-Prüfsumme und Socket-API (`bind`, `sendto`, `recvfrom`).
-7. **TCP** nach RFC 9293: Drei-Wege-Handshake, alle Zustände inklusive `TIME_WAIT`,
-   simultanes Öffnen/Schließen, Sequenznummern mit Wraparound, Sliding Window,
-   Flusskontrolle, Zero-Window-Probing, Nagle, Delayed ACK, Retransmission-Timer nach
-   RFC 6298 (SRTT/RTTVAR, Karn), Fast Retransmit/Fast Recovery, SACK (RFC 2018),
-   Window Scaling und Timestamps (RFC 7323), Keepalive, RST-Behandlung.
-8. **Staukontrolle**: Reno und CUBIC als austauschbare Strategien, Messung von cwnd über
-   die Zeit (CSV-Export).
-9. **Socket-API** im Stil von `socket` (`listen`, `accept`, `connect`, `send`, `recv`,
-   `close`, `shutdown`) mit blockierender und ereignisbasierter Variante.
-10. **Anwendungen** über dem Stack: Echo-Server, einfacher HTTP/1.0-Client und -Server,
-    Dateiübertragung mit Prüfsummenvergleich, DNS-Resolver (UDP) gegen einen
-    simulierten DNS-Server.
+## Functional Requirements
+1. **Simulator** (`netsim/`): discrete event simulation with a virtual clock, links with
+   configurable latency/bandwidth/queue size (drop-tail and RED), loss and corruption
+   models with a seed, capture in pcap format (readable by Wireshark).
+2. **Ethernet** (frames, MAC addresses, broadcast), **switch** with MAC learning and
+   aging.
+3. **ARP** with cache, timeouts, gratuitous ARP, queue for unresolved packets.
+4. **IPv4**: header encoding including checksum, TTL, fragmentation and reassembly (with
+   timeouts, overlapping fragments), routing table with longest-prefix match, routers with
+   several interfaces.
+5. **ICMP**: echo (ping with RTT statistics), destination unreachable, time exceeded, a
+   `traceroute` tool.
+6. **UDP** with pseudo-header checksum and a socket API (`bind`, `sendto`, `recvfrom`).
+7. **TCP** per RFC 9293: three-way handshake, all states including `TIME_WAIT`,
+   simultaneous open/close, sequence numbers with wraparound, sliding window, flow
+   control, zero-window probing, Nagle, delayed ACK, retransmission timer per RFC 6298
+   (SRTT/RTTVAR, Karn), fast retransmit/fast recovery, SACK (RFC 2018), window scaling
+   and timestamps (RFC 7323), keepalive, RST handling.
+8. **Congestion control**: Reno and CUBIC as interchangeable strategies, measurement of
+   cwnd over time (CSV export).
+9. **Socket API** in the style of `socket` (`listen`, `accept`, `connect`, `send`,
+   `recv`, `close`, `shutdown`) with a blocking and an event-driven variant.
+10. **Applications** on top of the stack: echo server, simple HTTP/1.0 client and server,
+    file transfer with checksum comparison, DNS resolver (UDP) against a simulated DNS
+    server.
 
-## Teststrategie (pytest)
-- Kodierungstests für jedes Protokoll mit bekannten Bytefolgen (Prüfsummen von Hand
-  nachgerechnet).
-- TCP-Zustandsautomat: Tests für jeden Übergang inkl. Randfällen (RST in jedem Zustand,
-  verspätete Segmente, Sequenznummer-Wraparound).
-- Robustheit: Übertragung von 5 MB über Links mit 0 %, 1 %, 5 % und 20 % Verlust,
-  Umordnung und Duplikaten – Daten müssen bitgenau ankommen (feste Seeds).
-- Vergleich Reno vs. CUBIC auf einem Link mit großem Bandbreiten-Verzögerungs-Produkt
-  (Durchsatz dokumentieren).
-- Fragmentierungs- und Routing-Tests über Topologien mit mindestens 3 Routern.
-- pcap-Dateien werden mit einem eigenen Parser zurückgelesen und validiert.
-- Mindestens 300 Testfälle.
+## Test Strategy (pytest)
+- Encoding tests for every protocol with known byte sequences (checksums computed by
+  hand).
+- TCP state machine: tests for every transition including edge cases (RST in every state,
+  late segments, sequence number wraparound).
+- Robustness: transfer 5 MB over links with 0 %, 1 %, 5 % and 20 % loss, reordering and
+  duplicates – data must arrive bit-exact (fixed seeds).
+- Compare Reno vs. CUBIC on a link with a large bandwidth-delay product (document
+  throughput).
+- Fragmentation and routing tests across topologies with at least 3 routers.
+- pcap files are read back and validated with your own parser.
+- At least 300 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` vollständig grün; README mit Architekturdiagramm (ASCII),
-  DESIGN.md, PROGRESS.md; Messergebnisse (Durchsatz, Retransmissions) dokumentiert.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes completely; README with an architecture diagram (ASCII),
+  DESIGN.md, PROGRESS.md; measurement results (throughput, retransmissions) documented.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

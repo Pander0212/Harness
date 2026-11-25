@@ -1,59 +1,55 @@
 ---
 topic: text
 spec_docs: false
+legacy_title: Tabellenkalkulations-Engine mit Formelsprache, Neuberechnung und XLSX-Export
 ---
-# Tabellenkalkulations-Engine mit Formelsprache, Neuberechnung und XLSX-Export
+# Spreadsheet Engine with a Formula Language, Recalculation and XLSX Export
 
-## Ziel
-Entwickle in reinem Python 3 (nur Standardbibliothek) den Kern einer Tabellenkalkulation:
-Formelsprache mit Parser und Auswertung, Abhängigkeitsgraph mit inkrementeller
-Neuberechnung, über 120 Funktionen, mehrere Arbeitsblätter, Undo/Redo, CSV-Import und
-Export im echten XLSX-Format (Office Open XML über `zipfile` und `xml`). Dazu ein
-Terminal-Frontend. Umfang: mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Build, in pure Python 3 (standard library only), the core of a spreadsheet: a formula
+language with a parser and evaluation, a dependency graph with incremental recalculation,
+more than 120 functions, several worksheets, undo/redo, CSV import and export to the real
+XLSX format (Office Open XML via `zipfile` and `xml`). Plus a terminal frontend. Scope: at
+least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Zelladressen**: A1- und R1C1-Notation, relative/absolute Bezüge (`$A$1`),
-   Bereiche, ganze Spalten/Zeilen, Bezüge auf andere Blätter (`'Blatt 2'!B3`),
-   benannte Bereiche.
-2. **Formelsprache**: Tokenizer und Parser mit korrekter Operatorpräzedenz (inkl.
-   Prozent, Potenz, Verkettung `&`, Vergleich, Schnittmengen-/Vereinigungsoperator),
-   Array-Konstanten `{1,2;3,4}`, Fehlerwerte (`#DIV/0!`, `#REF!`, `#NAME?`, `#VALUE!`,
-   `#N/A`, `#NUM!`, `#CIRCULAR`), Typkoerzion wie in gängigen Tabellenkalkulationen.
-3. **Funktionen** (mindestens 120): Mathematik (SUMME/SUM, SUMMEWENN/SUMIFS,
-   PRODUKT, RUNDEN-Familie, REST …), Statistik (MITTELWERT, MEDIAN, STABW, KGRÖSSTE,
-   RANG …), Logik (WENN, WENNS, UND, ODER, WENNFEHLER), Text (LINKS, TEIL, FINDEN,
-   ERSETZEN, TEXT mit Formatcodes, VERKETTEN, TEXTKETTE), Datum/Zeit (DATUM, HEUTE als
-   injizierbare Uhr, NETTOARBEITSTAGE, EDATUM), Nachschlagen (SVERWEIS, WVERWEIS,
-   INDEX, VERGLEICH, XVERWEIS), Finanzen (BW, ZW, RMZ, ZINS, NBW, IKV), dynamische
-   Arrays mit Überlauf (FILTER, SORTIEREN, EINDEUTIG, SEQUENZ). Englische
-   Funktionsnamen als Alias.
-4. **Neuberechnung**: Abhängigkeitsgraph, Dirty-Markierung, topologische Neuberechnung
-   nur betroffener Zellen, Zyklenerkennung mit Fehlerwert, volatile Funktionen,
-   iterative Berechnung (optional mit Maximaliterationen).
-5. **Bearbeitung**: Zeilen/Spalten einfügen und löschen mit korrekter Anpassung aller
-   Bezüge (inkl. `#REF!`), Kopieren/Einfügen mit relativer Anpassung, Füllen,
-   Sortieren von Bereichen, **Undo/Redo** als Befehlsmuster.
-6. **Formatierung**: Zahlenformate (Datum, Prozent, Währung, benutzerdefinierte
-   Formatcodes) und Anzeigeausgabe.
-7. **Import/Export**: CSV mit Typinferenz, eigenes JSON-Format, **XLSX-Export und
-   -Import** (Werte, Formeln, mehrere Blätter, gemeinsame Strings, Zahlenformate),
-   so dass die Datei in gängigen Programmen öffnet.
-8. **Terminal-UI** mit `curses` (Navigation, Eingabe, Formelleiste) als optionales
-   Frontend.
+## Functional Requirements
+1. **Cell addresses**: A1 and R1C1 notation, relative/absolute references (`$A$1`),
+   ranges, whole columns/rows, references to other sheets (`'Sheet 2'!B3`), named ranges.
+2. **Formula language**: tokenizer and parser with correct operator precedence
+   (including percent, exponent, concatenation `&`, comparison, intersection/union
+   operators), array constants `{1,2;3,4}`, error values (`#DIV/0!`, `#REF!`, `#NAME?`,
+   `#VALUE!`, `#N/A`, `#NUM!`, `#CIRCULAR`), type coercion as in common spreadsheets.
+3. **Functions** (at least 120): math (SUM, SUMIF/SUMIFS, PRODUCT, the ROUND family,
+   MOD …), statistics (AVERAGE, MEDIAN, STDEV, LARGE, RANK …), logic (IF, IFS, AND, OR,
+   IFERROR), text (LEFT, MID, FIND, REPLACE, TEXT with format codes, CONCATENATE,
+   TEXTJOIN), date/time (DATE, TODAY via an injectable clock, NETWORKDAYS, EDATE), lookup
+   (VLOOKUP, HLOOKUP, INDEX, MATCH, XLOOKUP), finance (PV, FV, PMT, RATE, NPV, IRR),
+   dynamic arrays with spilling (FILTER, SORT, UNIQUE, SEQUENCE).
+4. **Recalculation**: dependency graph, dirty marking, topological recalculation of only
+   the affected cells, cycle detection with an error value, volatile functions, iterative
+   calculation (optionally with a maximum number of iterations).
+5. **Editing**: inserting and deleting rows/columns with correct adjustment of all
+   references (including `#REF!`), copy/paste with relative adjustment, fill, sorting
+   ranges, **undo/redo** via the command pattern.
+6. **Formatting**: number formats (date, percent, currency, custom format codes) and
+   display output.
+7. **Import/export**: CSV with type inference, your own JSON format, **XLSX export and
+   import** (values, formulas, several sheets, shared strings, number formats) so that the
+   file opens in common programs.
+8. **Terminal UI** with `curses` (navigation, input, formula bar) as an optional frontend.
 
-## Teststrategie (pytest)
-- Parser-Tests (Präzedenz, Fehlerfälle) und mindestens 400 Funktionstests mit
-  erwarteten Werten (inkl. Fehlerwerte und Typkoerzion).
-- Neuberechnung: nur betroffene Zellen werden neu berechnet (Zähler); Zyklen werden
-  erkannt; modellbasierte Tests mit 2000 zufälligen Bearbeitungen gegen eine vollständige
-  Neuberechnung.
-- Einfügen/Löschen von Zeilen: Bezüge in allen Formeln korrekt angepasst.
-- XLSX: Round-Trip Export → Import ergibt identische Arbeitsmappe; XML-Struktur validiert.
-- Mindestens 350 Testfälle.
+## Test Strategy (pytest)
+- Parser tests (precedence, error cases) and at least 400 function tests with expected
+  values (including error values and type coercion).
+- Recalculation: only affected cells are recalculated (counter); cycles are detected;
+  model-based tests with 2000 random edits against a full recalculation.
+- Inserting/deleting rows: references in all formulas adjusted correctly.
+- XLSX: round trip export → import yields an identical workbook; XML structure validated.
+- At least 350 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Funktionsreferenz in docs/FUNCTIONS.md, Architektur in
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; function reference in docs/FUNCTIONS.md, architecture in
   DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

@@ -1,60 +1,63 @@
-# HTTP/1.1-Server und Mini-Webframework "Brise"
+---
+legacy_title: HTTP/1.1-Server und Mini-Webframework "Brise"
+---
+# HTTP/1.1 Server and Mini Web Framework "Breeze"
 
-## Ziel
-Implementiere in reinem Python 3 (nur Standardbibliothek, **ohne** `http.server`,
-`wsgiref` oder `urllib` für das Parsen von Requests – Sockets, `selectors`, `threading`
-bzw. `asyncio` sind erlaubt) einen standardkonformen HTTP/1.1-Server und darauf ein
-kleines Webframework **Brise** mit Routing, Middleware, Templates, Sessions und
-statischen Dateien. Belege Robustheit und Leistung mit Lasttests.
+## Goal
+Implement, in pure Python 3 (standard library only, **without** `http.server`, `wsgiref`
+or `urllib` for parsing requests – sockets, `selectors`, `threading` or `asyncio` are
+allowed), a standards-compliant HTTP/1.1 server and on top of it a small web framework
+**Breeze** with routing, middleware, templates, sessions and static files. Prove
+robustness and performance with load tests.
 
-## Server-Anforderungen (RFC 9110/9112)
-1. Eigener inkrementeller Request-Parser: Request-Line, Header (case-insensitive,
-   mehrfach vorkommende Header, Obergrenzen für Größe), `Content-Length` und
-   `Transfer-Encoding: chunked` (inkl. Trailer), Ablehnung fehlerhafter Anfragen mit
-   400, zu großer mit 413/431, unbekannter Methoden mit 501.
-2. Persistente Verbindungen (Keep-Alive), Pipelining in korrekter Reihenfolge,
-   `Connection: close`, Idle-Timeouts, `Expect: 100-continue`.
-3. Antworten mit `Content-Length` oder chunked Streaming (Generatoren), `HEAD`
-   korrekt ohne Body, `Date`-Header, Bereichsanfragen (`Range`, 206, 416) für statische
-   Dateien, bedingte Anfragen (`ETag`, `If-None-Match`, `Last-Modified`,
-   `If-Modified-Since` → 304), gzip-Kompression bei `Accept-Encoding`.
-4. Nebenläufigkeit über einen Thread-Pool **oder** eine Event-Loop mit `selectors`;
-   sauberes Herunterfahren; Schutz vor Slowloris (Timeouts beim Header-Lesen).
-5. Zugriffs-Log im Common Log Format.
+## Server Requirements (RFC 9110/9112)
+1. Your own incremental request parser: request line, headers (case-insensitive,
+   repeated headers, size limits), `Content-Length` and `Transfer-Encoding: chunked`
+   (including trailers), rejection of malformed requests with 400, oversized ones with
+   413/431, unknown methods with 501.
+2. Persistent connections (keep-alive), pipelining in the correct order,
+   `Connection: close`, idle timeouts, `Expect: 100-continue`.
+3. Responses with `Content-Length` or chunked streaming (generators), `HEAD` correctly
+   without a body, `Date` header, range requests (`Range`, 206, 416) for static files,
+   conditional requests (`ETag`, `If-None-Match`, `Last-Modified`, `If-Modified-Since` →
+   304), gzip compression with `Accept-Encoding`.
+4. Concurrency via a thread pool **or** an event loop with `selectors`; clean shutdown;
+   protection against Slowloris (timeouts while reading headers).
+5. Access log in Common Log Format.
 
-## Framework-Anforderungen
-1. **Routing**: `@app.route("/users/<int:id>", methods=["GET"])`, Konverter
-   (`int`, `str`, `path`, `uuid`), 404/405 mit `Allow`-Header, URL-Generierung
-   `url_for`.
-2. **Request/Response-Objekte**: Query-Parameter, Formulardaten
-   (`application/x-www-form-urlencoded` und `multipart/form-data` mit Dateiupload),
-   JSON-Body, Cookies (Parsen und Setzen mit Attributen), Redirects, JSON-Antworten.
-3. **Middleware-Kette** (vorher/nachher, Abbruch möglich): Logging, CORS,
-   Fehlerbehandlung mit Debug-Seite, Request-ID.
-4. **Template-Engine** (eigene Implementierung): Variablen mit automatischem
-   HTML-Escaping, `{% if %}`, `{% for %}` mit `loop.index`, Filter (`upper`, `default`,
-   `length`, `join`), Vererbung mit `{% extends %}`/`{% block %}`, `{% include %}`,
-   Kompilierung zu Python-Code mit Cache.
-5. **Sessions**: signierte Cookies (HMAC-SHA256) und alternativ serverseitiger
-   Speicher; CSRF-Token für Formulare.
-6. **Statische Dateien** mit MIME-Typen, Schutz vor Path-Traversal.
-7. **Beispielanwendung**: kleines Notizbuch mit Login, Notizen anlegen/bearbeiten/
-   löschen, Datei-Upload, JSON-API.
+## Framework Requirements
+1. **Routing**: `@app.route("/users/<int:id>", methods=["GET"])`, converters (`int`,
+   `str`, `path`, `uuid`), 404/405 with an `Allow` header, URL generation `url_for`.
+2. **Request/response objects**: query parameters, form data
+   (`application/x-www-form-urlencoded` and `multipart/form-data` with file upload), JSON
+   body, cookies (parsing and setting with attributes), redirects, JSON responses.
+3. **Middleware chain** (before/after, can short-circuit): logging, CORS, error handling
+   with a debug page, request ID.
+4. **Template engine** (your own implementation): variables with automatic HTML
+   escaping, `{% if %}`, `{% for %}` with `loop.index`, filters (`upper`, `default`,
+   `length`, `join`), inheritance with `{% extends %}`/`{% block %}`, `{% include %}`,
+   compilation to Python code with a cache.
+5. **Sessions**: signed cookies (HMAC-SHA256) and alternatively server-side storage;
+   CSRF tokens for forms.
+6. **Static files** with MIME types, protection against path traversal.
+7. **Example application**: a small notebook with login, creating/editing/deleting notes,
+   file upload, JSON API.
 
-## Teststrategie (pytest)
-- Parser-Tests mit rohen Byte-Strömen, auch byteweise zerstückelt zugeführt.
-- Integrationstests über echte Sockets gegen einen Server auf zufälligem Port
-  (Keep-Alive, Pipelining, chunked, Range, 304, gzip, Fehlercodes).
-- Fuzz-Tests: 1000 zufällig mutierte Requests dürfen den Server nie zum Absturz
-  bringen (Antwort 4xx oder Verbindungsabbruch).
-- Template- und Routing-Tests, Session-Signatur-Manipulation muss erkannt werden.
-- **Lasttest** (`loadtest.py` + pytest-Marker): mindestens 50 parallele Clients,
-  10.000 Requests, keine Fehler; Durchsatz und Latenz-Perzentile (p50/p95/p99) werden
-  ausgegeben und in DESIGN.md dokumentiert.
-- Mindestens 150 Testfälle.
+## Test Strategy (pytest)
+- Parser tests with raw byte streams, also fed byte by byte in fragments.
+- Integration tests over real sockets against a server on a random port (keep-alive,
+  pipelining, chunked, range, 304, gzip, error codes).
+- Fuzz tests: 1000 randomly mutated requests must never crash the server (response 4xx
+  or connection closed).
+- Template and routing tests; tampering with the session signature must be detected.
+- **Load test** (`loadtest.py` + a pytest marker): at least 50 parallel clients, 10,000
+  requests, no errors; throughput and latency percentiles (p50/p95/p99) are printed and
+  documented in DESIGN.md.
+- At least 150 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün, Beispielanwendung startbar, README, DESIGN.md, PROGRESS.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes, the example application starts, README, DESIGN.md,
+  PROGRESS.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

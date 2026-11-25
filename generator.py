@@ -2,77 +2,96 @@
 import random
 import re
 
+# (Schlüssel, deutscher Name fürs UI, englischer Name, englische Beispielideen)
 TOPICS = [
-    ("compiler", "Compiler & Interpreter", "Compiler für eine Teilsprache nach Bytecode/Assembler, "
-     "Optimierungspässe (SSA, Konstantenfaltung, Registerallokation), Typinferenz"),
-    ("database", "Datenbanken & Speicher", "Key-Value-Store mit LSM-Tree, Dokumentdatenbank, "
-     "Zeitreihen-DB, Volltextsuche mit invertiertem Index, Query-Optimierer"),
-    ("network", "Netzwerke & Protokolle", "DNS-Resolver, TCP-Simulation über UDP, "
-     "Redis-kompatibler Server, MQTT-Broker, IRC-Server, HTTP/2-Framing"),
-    ("game_engine", "Spiele-Engines & Simulation", "2D-Physik-Engine, ECS-Engine, "
-     "Schach-Engine mit Alpha-Beta, Roguelike-Engine (Terminal), Rätsellöser"),
-    ("crypto", "Kryptographie", "SHA-256/AES/ChaCha20 von Grund auf mit Testvektoren, "
-     "RSA mit Primtests, elliptische Kurven, TLS-ähnlicher Handshake"),
-    ("numerics", "Numerik & wissenschaftliches Rechnen", "Matrixbibliothek mit LU/QR/SVD, "
-     "ODE-Löser, FFT, symbolische Differentiation, Optimierungsverfahren"),
-    ("parser", "Parser & Formate", "JSON/YAML/TOML-Parser, Regex-Engine (NFA/DFA), "
-     "Parser-Generator (LL/LALR), Markdown-zu-HTML, CSV mit Dialekten"),
-    ("os_sim", "Betriebssystem-Simulation", "Prozess-Scheduler, virtueller Speicher mit "
-     "Paging, Dateisystem auf Blockgerät, Shell mit Pipes, Speicherallokator"),
-    ("distributed", "Verteilte Systeme", "Raft-Konsens mit Netzwerksimulation, verteilter "
-     "KV-Store, CRDTs, Gossip-Protokoll, MapReduce-Framework"),
-    ("image", "Bildverarbeitung & Grafik", "PNG-Encoder/Decoder, Raytracer, "
-     "Rasterizer, Bildfilter und Kantenerkennung, JPEG-Baseline-Decoder"),
-    ("algorithms", "Algorithmen & Datenstrukturen", "Graphbibliothek (Flüsse, Matching), "
-     "persistente Datenstrukturen, SAT-Solver (CDCL), Constraint-Solver, Suffix-Arrays"),
-    ("compression", "Kompression & Kodierung", "DEFLATE-Implementierung kompatibel zu zlib, "
-     "LZ77/Huffman, Arithmetische Kodierung, BWT-Kompressor, Reed-Solomon"),
-    ("emulation", "Emulation & virtuelle Maschinen", "CHIP-8/6502-Emulator, "
-     "WebAssembly-Interpreter, JVM-Teilmenge, Stack-VM mit JIT-artiger Optimierung"),
-    ("devtools", "Entwicklerwerkzeuge", "Build-System mit Abhängigkeitsgraph, Linter mit "
-     "AST-Regeln, Code-Formatter, Test-Runner, Paketmanager-Resolver (SAT)"),
-    ("ml", "Maschinelles Lernen von Grund auf", "Autograd-Engine, neuronales Netz mit "
-     "Backprop, Entscheidungsbäume/Random Forest, k-Means, Tokenizer (BPE)"),
-    ("text", "Textverarbeitung & Suche", "Rechtschreibprüfung, diff3/Merge-Tool, "
-     "Template-Engine, Suchmaschine mit BM25 und Ranking, Typesetter"),
+    ("compiler", "Compiler & Interpreter", "Compilers & interpreters",
+     "compiler for a language subset to bytecode/assembly, optimization passes (SSA, "
+     "constant folding, register allocation), type inference"),
+    ("database", "Datenbanken & Speicher", "Databases & storage",
+     "key-value store with LSM tree, document database, time-series DB, full-text search "
+     "with an inverted index, query optimizer"),
+    ("network", "Netzwerke & Protokolle", "Networking & protocols",
+     "DNS resolver, TCP simulation over UDP, Redis-compatible server, MQTT broker, IRC "
+     "server, HTTP/2 framing"),
+    ("game_engine", "Spiele-Engines & Simulation", "Game engines & simulation",
+     "2D physics engine, ECS engine, chess engine with alpha-beta, roguelike engine "
+     "(terminal), puzzle solver"),
+    ("crypto", "Kryptographie", "Cryptography",
+     "SHA-256/AES/ChaCha20 from scratch with test vectors, RSA with primality tests, "
+     "elliptic curves, TLS-like handshake"),
+    ("numerics", "Numerik & wissenschaftliches Rechnen", "Numerics & scientific computing",
+     "matrix library with LU/QR/SVD, ODE solvers, FFT, symbolic differentiation, "
+     "optimization methods"),
+    ("parser", "Parser & Formate", "Parsers & formats",
+     "JSON/YAML/TOML parser, regex engine (NFA/DFA), parser generator (LL/LALR), "
+     "Markdown to HTML, CSV with dialects"),
+    ("os_sim", "Betriebssystem-Simulation", "Operating system simulation",
+     "process scheduler, virtual memory with paging, file system on a block device, shell "
+     "with pipes, memory allocator"),
+    ("distributed", "Verteilte Systeme", "Distributed systems",
+     "Raft consensus with network simulation, distributed KV store, CRDTs, gossip "
+     "protocol, MapReduce framework"),
+    ("image", "Bildverarbeitung & Grafik", "Image processing & graphics",
+     "PNG encoder/decoder, ray tracer, rasterizer, image filters and edge detection, "
+     "baseline JPEG decoder"),
+    ("algorithms", "Algorithmen & Datenstrukturen", "Algorithms & data structures",
+     "graph library (flows, matching), persistent data structures, CDCL SAT solver, "
+     "constraint solver, suffix arrays"),
+    ("compression", "Kompression & Kodierung", "Compression & coding",
+     "zlib-compatible DEFLATE implementation, LZ77/Huffman, arithmetic coding, BWT "
+     "compressor, Reed-Solomon"),
+    ("emulation", "Emulation & virtuelle Maschinen", "Emulation & virtual machines",
+     "CHIP-8/6502 emulator, WebAssembly interpreter, JVM subset, stack VM with JIT-like "
+     "optimization"),
+    ("devtools", "Entwicklerwerkzeuge", "Developer tools",
+     "build system with dependency graph, linter with AST rules, code formatter, test "
+     "runner, package manager resolver (SAT)"),
+    ("ml", "Maschinelles Lernen von Grund auf", "Machine learning from scratch",
+     "autograd engine, neural network with backprop, decision trees/random forest, "
+     "k-means, BPE tokenizer"),
+    ("text", "Textverarbeitung & Suche", "Text processing & search",
+     "spell checker, diff3/merge tool, template engine, search engine with BM25 ranking, "
+     "typesetter"),
 ]
 TOPIC_KEYS = [t[0] for t in TOPICS]
-TOPIC_NAMES = {t[0]: t[1] for t in TOPICS}
+TOPIC_NAMES = {t[0]: t[1] for t in TOPICS}        # UI (deutsch)
+TOPIC_NAMES_EN = {t[0]: t[2] for t in TOPICS}     # Prompt (englisch)
 
-GEN_SYSTEM = ("Du bist ein erfahrener Informatik-Dozent und entwirfst anspruchsvolle, "
-              "realistische Software-Projekte, an denen ein autonomer Coding-Agent mehrere "
-              "Stunden test-driven arbeitet.")
+GEN_SYSTEM = ("You are an experienced computer science lecturer who designs demanding, "
+              "realistic software projects on which an autonomous coding agent works "
+              "test-driven for many hours.")
 
-GEN_PROMPT = """Entwirf eine NEUE, ausführliche Projektaufgabe.
+DONE_SENTENCE = "Do not stop until everything is finished and all tests pass."
 
-THEMENBEREICH (verbindlich): {topic_name}
-Beispielideen für diesen Bereich (nur Anregung, gerne etwas anderes): {topic_examples}
+GEN_PROMPT = """Design a NEW, detailed project assignment.
 
-BEREITS VORHANDENE PROJEKTE (keines davon wiederholen, auch nicht leicht abgewandelt):
+TOPIC AREA (mandatory): {topic_name}
+Example ideas for this area (inspiration only, something else is welcome): {topic_examples}
+
+EXISTING PROJECTS (do not repeat any of them, not even slightly modified):
 {history}
 
-ANFORDERUNGEN AN DIE AUFGABE
-- Anspruchsvolles, in sich geschlossenes Software-Projekt in Python 3 (nur Standardbibliothek)
-  mit pytest. Umfang: mindestens 8 Stunden ununterbrochene Arbeit für einen erfahrenen
-  Entwickler – mindestens 8 Module bzw. Komponenten, mindestens 250 Testfälle,
-  differenzielle oder Eigenschaftstests gegen eine Referenz (Standardbibliothek,
-  Brute-Force-Implementierung, offizielle Testvektoren o. Ä.), Robustheits- und
-  Leistungstests mit dokumentierten Messwerten.
-- Gliederung wie im Stilbeispiel: Ziel, detaillierte funktionale Anforderungen
-  (nummeriert, konkret), Architekturvorgaben, Teststrategie mit konkreten Testfällen und
-  Mindestanzahl Tests, Abnahmekriterien.
-- Test-driven: zuerst Tests, nach jedem Feature Tests laufen lassen, DESIGN.md und
-  PROGRESS.md pflegen.
-- Muss mit dem Satz enden: "Höre erst auf, wenn alles fertig ist und alle Tests grün sind."
-- Mindestens 600 Wörter.
+REQUIREMENTS FOR THE ASSIGNMENT
+- A demanding, self-contained software project in Python 3 (standard library only) with
+  pytest. Scope: at least 8 hours of uninterrupted work for an experienced developer – at
+  least 8 modules or components, at least 250 test cases, differential or property tests
+  against a reference (standard library, brute-force implementation, official test
+  vectors or similar), robustness and performance tests with documented measurements.
+- Structure as in the style example: goal, detailed functional requirements (numbered,
+  concrete), architecture guidelines, test strategy with concrete test cases and a minimum
+  number of tests, acceptance criteria.
+- Test-driven: tests first, run the tests after every feature, maintain DESIGN.md and
+  PROGRESS.md.
+- Must end with the sentence: "{done}"
+- At least 600 words, written in English.
 
-STILBEISPIEL (gekürzt):
+STYLE EXAMPLE (abridged):
 {example}
 
-ANTWORTFORMAT (exakt einhalten):
-TITEL: <kurzer prägnanter Titel>
+RESPONSE FORMAT (follow exactly):
+TITLE: <short, concise title>
 ---
-<vollständige Aufgabenbeschreibung in Markdown>"""
+<complete assignment in Markdown>"""
 
 
 def normalize_title(t):
@@ -110,9 +129,9 @@ def choose_topic(history, rng=None, avoid_last=3):
 
 
 def parse_generated(text):
-    m = re.search(r"TITEL:\s*(.+)", text or "")
+    m = re.search(r"(?:TITLE|TITEL):\s*(.+)", text or "")
     if not m:
-        raise ValueError("Kein 'TITEL:' gefunden")
+        raise ValueError("No 'TITLE:' line found.")
     title = m.group(1).strip().strip("*#` ")
     rest = text[m.end():]
     if "---" in rest:
@@ -124,25 +143,26 @@ def parse_generated(text):
 def validate(title, body, existing_titles):
     problems = []
     if is_duplicate(title, existing_titles):
-        problems.append(f"Der Titel '{title}' ist einem vorhandenen Projekt zu ähnlich.")
+        problems.append(f"The title '{title}' is too similar to an existing project.")
     if len(body.split()) < 400:
-        problems.append(f"Die Beschreibung ist zu kurz ({len(body.split())} Wörter, "
-                        "mindestens 600 gefordert).")
+        problems.append(f"The description is too short ({len(body.split())} words, "
+                        "at least 600 required).")
     if "pytest" not in body.lower():
-        problems.append("Die Teststrategie mit pytest fehlt.")
+        problems.append("The test strategy with pytest is missing.")
     return problems
 
 
 def generate_task(caller, history, example, rng=None, max_attempts=3):
     """caller(messages) -> text. Gibt dict(title, prompt, topic) zurück."""
     topic = choose_topic(history, rng)
-    _, name, examples = next(t for t in TOPICS if t[0] == topic)
-    hist_lines = [f"- {h.get('title')} [{TOPIC_NAMES.get(h.get('topic'), h.get('topic') or '?')}]"
-                  for h in history[-300:]] or ["(noch keine)"]
+    _, _, name, examples = next(t for t in TOPICS if t[0] == topic)
+    hist_lines = [f"- {h.get('title')} "
+                  f"[{TOPIC_NAMES_EN.get(h.get('topic'), h.get('topic') or '?')}]"
+                  for h in history[-300:]] or ["(none yet)"]
     messages = [{"role": "system", "content": GEN_SYSTEM},
                 {"role": "user", "content": GEN_PROMPT.format(
                     topic_name=name, topic_examples=examples, history="\n".join(hist_lines),
-                    example=example[:3500])}]
+                    example=example[:3500], done=DONE_SENTENCE)}]
     existing = [h.get("title", "") for h in history]
     last_err = ""
     for _ in range(max_attempts):
@@ -153,12 +173,12 @@ def generate_task(caller, history, example, rng=None, max_attempts=3):
         except ValueError as e:
             problems = [str(e)]
         if not problems:
-            if "Höre erst auf" not in body:
-                body += "\n\nHöre erst auf, wenn alles fertig ist und alle Tests grün sind."
+            if DONE_SENTENCE not in body:
+                body += "\n\n" + DONE_SENTENCE
             return {"title": title, "prompt": body, "topic": topic}
         last_err = " ".join(problems)
         messages.append({"role": "assistant", "content": text})
-        messages.append({"role": "user", "content": "Die Aufgabe erfüllt die Vorgaben nicht: "
-                         + last_err + " Bitte überarbeite sie vollständig im geforderten "
-                         "Antwortformat."})
+        messages.append({"role": "user", "content": "The assignment does not meet the "
+                         "requirements: " + last_err + " Please revise it completely in the "
+                         "required response format."})
     raise ValueError(f"Generator lieferte keine gültige Aufgabe: {last_err}")

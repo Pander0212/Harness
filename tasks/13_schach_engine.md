@@ -1,50 +1,48 @@
 ---
 topic: game_engine
 spec_docs: false
+legacy_title: Schach-Engine mit Bitboards, Perft-Verifikation und UCI
 ---
-# Schach-Engine mit Bitboards, Perft-Verifikation und UCI
+# Chess Engine with Bitboards, Perft Verification and UCI
 
-## Ziel
-Implementiere in reinem Python 3 (nur Standardbibliothek) eine spielstarke Schach-
-Engine. Die Zuggenerierung muss nachweislich exakt sein (Perft), die Suche modern und
-so effizient, wie es in Python möglich ist. Umfang: mindestens 8 Stunden konzentrierter
-Arbeit.
+## Goal
+Implement, in pure Python 3 (standard library only), a strong chess engine. Move
+generation must be provably exact (perft), the search modern and as efficient as Python
+allows. Scope: at least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Brettdarstellung** mit 64-Bit-Bitboards (Python-int), Figurenlisten, Zobrist-
-   Hashing mit inkrementeller Aktualisierung, FEN lesen/schreiben.
-2. **Zuggenerierung**: alle Regeln inklusive Rochade (mit Durchzugsprüfung),
-   en passant (inklusive Fesselungsfall), Umwandlung, Schach-Evasion, gefesselte
-   Figuren; Sliding-Pieces über Magic Bitboards oder Kogge-Stone; vollständig legale
-   Generierung; make/unmake mit Undo-Stack.
-3. **Regeln**: Matt, Patt, 50-Züge-Regel, dreifache Stellungswiederholung,
-   ungenügendes Material; SAN- und UCI-Notation in beide Richtungen; PGN lesen und
-   schreiben.
-4. **Bewertung**: Material, Piece-Square-Tables mit Tapered Eval (Mittel-/Endspiel),
-   Bauernstruktur (Doppel-, isolierte, Freibauern) mit Bauern-Hash-Tabelle, Mobilität,
-   Königssicherheit, Läuferpaar; Static Exchange Evaluation.
-5. **Suche**: iterative Vertiefung, PVS/Negamax mit Alpha-Beta, Aspiration Windows,
-   Transpositionstabelle mit Ersetzungsstrategie, Quiescence Search mit SEE-Pruning,
-   Null-Move-Pruning, Late Move Reductions, Killer-Moves, History-Heuristik, Check
-   Extensions, Mate-Distance-Pruning, Zeitmanagement.
-6. **Eröffnungsbuch** aus einer kleinen PGN-Sammlung; Endspiel: KQK/KRK-Matt sicher
-   finden.
-7. **UCI-Protokoll** (`uci`, `isready`, `position`, `go` mit wtime/btime/depth/movetime,
-   `stop`, `info`-Ausgaben), damit die Engine in GUIs läuft.
-8. **Selbstspiel-Turnier** zwischen Engine-Versionen mit Elo-Schätzung.
+## Functional Requirements
+1. **Board representation** with 64-bit bitboards (Python int), piece lists, Zobrist
+   hashing with incremental updates, reading/writing FEN.
+2. **Move generation**: all rules including castling (with checks on traversed squares),
+   en passant (including the pin case), promotion, check evasion, pinned pieces; sliding
+   pieces via magic bitboards or Kogge-Stone; fully legal generation; make/unmake with an
+   undo stack.
+3. **Rules**: checkmate, stalemate, fifty-move rule, threefold repetition, insufficient
+   material; SAN and UCI notation in both directions; reading and writing PGN.
+4. **Evaluation**: material, piece-square tables with tapered eval (middlegame/endgame),
+   pawn structure (doubled, isolated, passed pawns) with a pawn hash table, mobility, king
+   safety, bishop pair; static exchange evaluation.
+5. **Search**: iterative deepening, PVS/negamax with alpha-beta, aspiration windows,
+   transposition table with a replacement strategy, quiescence search with SEE pruning,
+   null-move pruning, late move reductions, killer moves, history heuristic, check
+   extensions, mate distance pruning, time management.
+6. **Opening book** from a small PGN collection; endgames: reliably find mate in KQK/KRK.
+7. **UCI protocol** (`uci`, `isready`, `position`, `go` with wtime/btime/depth/movetime,
+   `stop`, `info` output) so that the engine runs in GUIs.
+8. **Self-play tournament** between engine versions with an Elo estimate.
 
-## Teststrategie (pytest)
-- **Perft** für die Standardstellung bis Tiefe 4 und für die bekannten Teststellungen
-  („Kiwipete“, Positionen 3–6 aus dem Chess-Programming-Wiki) mit den publizierten
-  Knotenzahlen; Perft-Divide als Debug-Werkzeug.
-- Zobrist: inkrementeller Hash == neu berechneter Hash nach 10.000 Zufallszügen.
-- Taktik-Suite: mindestens 50 Mattaufgaben (Matt in 1–3) und taktische Stellungen
-  müssen gelöst werden.
-- SAN/PGN-Round-Trips, Regelgrenzfälle (Remisregeln), UCI-Dialoge.
-- Mindestens 250 Testfälle.
+## Test Strategy (pytest)
+- **Perft** for the starting position up to depth 4 and for the well-known test positions
+  ("Kiwipete", positions 3–6 from the Chess Programming Wiki) with the published node
+  counts; perft divide as a debugging tool.
+- Zobrist: incremental hash == freshly computed hash after 10,000 random moves.
+- Tactics suite: at least 50 mate puzzles (mate in 1–3) and tactical positions must be
+  solved.
+- SAN/PGN round trips, rule edge cases (draw rules), UCI dialogs.
+- At least 250 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Knoten pro Sekunde und Elo-Messungen in DESIGN.md.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; nodes per second and Elo measurements in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

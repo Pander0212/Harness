@@ -51,9 +51,9 @@ def test_generate_task_retries_until_valid():
     t = generate_task(caller, hist, "Beispiel", rng=random.Random(0))
     assert t["title"] == "CHIP-8 Emulator mit Debugger"
     assert t["topic"] in TOPIC_KEYS and t["topic"] != "database"
-    assert "Höre erst auf" in t["prompt"]
+    assert "Do not stop until" in t["prompt"]
     assert len(calls) == 3
-    assert "zu ähnlich" in calls[1][-1]["content"]
+    assert "too similar" in calls[1][-1]["content"]
     # Verlauf (bisherige Projekte) wird mitgegeben
     assert "Eigene SQL-Datenbank" in calls[0][1]["content"]
 

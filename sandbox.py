@@ -20,7 +20,7 @@ def truncate(text, limit=15000):
         return text
     half = max(1, (limit - 100) // 2)
     cut = len(text) - 2 * half
-    return (text[:half] + f"\n\n... [{cut} Zeichen gekürzt] ...\n\n" + text[-half:])
+    return (text[:half] + f"\n\n... [{cut} characters truncated] ...\n\n" + text[-half:])
 
 
 class PathError(Exception):
@@ -44,17 +44,17 @@ class PathGuard:
 
     def resolve(self, path):
         if not isinstance(path, str) or not path.strip():
-            raise PathError("Leerer Pfad")
+            raise PathError("Empty path")
         p = os.path.expanduser(path.strip())
         if not os.path.isabs(p):
             p = os.path.join(self.workspace, p)
         real = os.path.realpath(p)  # löst Symlinks und .. auf
         for d in self.deny:
             if real == d or self._inside(real, d):
-                raise PathError(f"Zugriff verweigert: {path}")
+                raise PathError(f"Access denied: {path}")
         if not any(self._inside(real, root) for root in self.allowed):
             raise PathError(
-                f"Zugriff verweigert: {path} liegt außerhalb der erlaubten Ordner "
+                f"Access denied: {path} is outside the allowed directories "
                 f"({', '.join(self.allowed)})")
         return real
 
@@ -341,12 +341,12 @@ class BashRunner:
     def run(self, command, timeout=600, stop_event=None):
         """Gibt (exit_code, ausgabe, timed_out) zurück."""
         if self.blocked:
-            return (126, "FEHLER: Die Sandbox ist nicht verfügbar, bash ist aus Sicherheits"
-                    f"gründen deaktiviert. ({self.blocked})", False)
+            return (126, "ERROR: the sandbox is not available, bash is disabled for "
+                    f"security reasons. ({self.blocked})", False)
         os.makedirs(self.workspace, exist_ok=True)
         argv = self._argv(command)
         if self.win_level and not isinstance(argv, list):
-            return (126, "FEHLER: Git Bash nicht gefunden – bash ist deaktiviert.", False)
+            return (126, "ERROR: Git Bash not found – bash is disabled.", False)
         env = dict(os.environ)
         env.pop("HARNESS_CONFIG", None)
         for k in list(env):
@@ -362,7 +362,7 @@ class BashRunner:
             try:
                 proc = self._spawn(argv, env, out)
             except OSError as e:
-                return 126, f"FEHLER: Prozess konnte nicht gestartet werden: {e}", False
+                return 126, f"ERROR: process could not be started: {e}", False
             deadline = time.monotonic() + timeout
             timed_out = stopped = False
             while True:
@@ -391,13 +391,13 @@ class BashRunner:
                 out.seek(size - lim // 2)
                 tail = out.read()
                 text = (head.decode("utf-8", errors="replace") +
-                        f"\n... [{size - lim} Bytes übersprungen] ...\n" +
+                        f"\n... [{size - lim} bytes skipped] ...\n" +
                         tail.decode("utf-8", errors="replace"))
             else:
                 text = out.read().decode("utf-8", errors="replace")
         if timed_out:
-            text += f"\n[TIMEOUT nach {timeout}s – Prozess beendet]"
+            text += f"\n[TIMEOUT after {timeout}s – process killed]"
         if stopped:
-            text += "\n[Abgebrochen: Agent wurde gestoppt]"
+            text += "\n[Aborted: the agent was stopped]"
         code = proc.returncode if proc.returncode is not None else -9
         return code, text, timed_out

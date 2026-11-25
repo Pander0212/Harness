@@ -1,52 +1,51 @@
 ---
 topic: compression
+legacy_title: "Bild- und Kompressions-Codecs: DEFLATE, PNG, GIF und Baseline-JPEG"
 ---
-# Bild- und Kompressions-Codecs: DEFLATE, PNG, GIF und Baseline-JPEG
+# Image and Compression Codecs: DEFLATE, PNG, GIF and Baseline JPEG
 
-## Ziel
-Implementiere in reinem Python 3 – **ohne** `zlib`, `gzip` oder `zipfile` für die
-eigentliche Kompression (nur in Tests als Referenz) – eine Codec-Bibliothek mit eigenem
-DEFLATE, PNG-Encoder/-Decoder, GIF (LZW) und Baseline-JPEG-Decoder samt Encoder. Umfang:
-mindestens 8 Stunden konzentrierter Arbeit.
+## Goal
+Implement, in pure Python 3 – **without** `zlib`, `gzip` or `zipfile` for the actual
+compression (allowed only in tests as a reference) – a codec library with your own
+DEFLATE, PNG encoder/decoder, GIF (LZW) and a baseline JPEG decoder plus encoder. Scope: at
+least 8 hours of focused work.
 
-## Funktionale Anforderungen
-1. **Bit-I/O**: Bitleser/-schreiber in LSB- und MSB-Reihenfolge, effizient für große
-   Dateien.
-2. **DEFLATE (RFC 1951)**: Dekompression aller Blocktypen (stored, fixed, dynamic
-   Huffman); Kompression mit LZ77 (Hash-Ketten, Lazy Matching, konfigurierbare Stufen
-   1–9) und optimalen dynamischen Huffman-Codes mit Längenbegrenzung (Package-Merge);
-   **zlib (RFC 1950)** und **gzip (RFC 1952)** Container mit Adler-32/CRC-32.
-3. **PNG**: alle Farbtypen und Bittiefen (1–16 Bit, Palette, Graustufen, Alpha),
-   Adam7-Interlacing, alle fünf Filter beim Dekodieren, adaptive Filterwahl beim
-   Kodieren, Chunks (IHDR, PLTE, IDAT über mehrere Chunks, tRNS, gAMA, tEXt, zTXt,
-   IEND), CRC-Prüfung, Fehler bei beschädigten Dateien.
-4. **GIF**: LZW-Kodierung/Dekodierung mit variabler Codelänge, Paletten, Transparenz,
-   Animationen (mehrere Frames, Disposal-Methoden), Interlacing.
-5. **JPEG Baseline**: Decoder für Huffman-kodierte Baseline-JPEGs (Marker SOI, APPn,
-   DQT, SOF0, DHT, SOS, DRI, EOI), Chroma-Subsampling 4:4:4/4:2:2/4:2:0, Restart-
-   Marker, IDCT (schnelle AAN-Variante und genaue Referenz), YCbCr→RGB; **Encoder** mit
-   Qualitätsparameter, Standard-Huffman-Tabellen und optional optimierten Tabellen.
-6. **Bildmodell** mit Konvertierungen (RGB, RGBA, Graustufen, Palette mit
-   Median-Cut-Quantisierung und Floyd-Steinberg-Dithering), Skalierung (bilinear,
-   bikubisch), Drehung, Zuschnitt.
+## Functional Requirements
+1. **Bit I/O**: bit reader/writer in LSB and MSB order, efficient for large files.
+2. **DEFLATE (RFC 1951)**: decompression of all block types (stored, fixed, dynamic
+   Huffman); compression with LZ77 (hash chains, lazy matching, configurable levels 1–9)
+   and optimal dynamic Huffman codes with length limiting (package-merge); **zlib
+   (RFC 1950)** and **gzip (RFC 1952)** containers with Adler-32/CRC-32.
+3. **PNG**: all color types and bit depths (1–16 bit, palette, grayscale, alpha), Adam7
+   interlacing, all five filters when decoding, adaptive filter selection when encoding,
+   chunks (IHDR, PLTE, IDAT across several chunks, tRNS, gAMA, tEXt, zTXt, IEND), CRC
+   check, errors on corrupted files.
+4. **GIF**: LZW encoding/decoding with variable code length, palettes, transparency,
+   animations (several frames, disposal methods), interlacing.
+5. **Baseline JPEG**: decoder for Huffman-coded baseline JPEGs (markers SOI, APPn, DQT,
+   SOF0, DHT, SOS, DRI, EOI), chroma subsampling 4:4:4/4:2:2/4:2:0, restart markers, IDCT
+   (fast AAN variant and an exact reference), YCbCr→RGB; **encoder** with a quality
+   parameter, standard Huffman tables and optionally optimized tables.
+6. **Image model** with conversions (RGB, RGBA, grayscale, palette with median-cut
+   quantization and Floyd-Steinberg dithering), scaling (bilinear, bicubic), rotation,
+   cropping.
 7. **CLI**: `python -m codecs_lab convert in.png out.jpg --quality 85`, `info`,
-   `compress`/`decompress` für gzip-Dateien.
+   `compress`/`decompress` for gzip files.
 
-## Teststrategie (pytest)
-- DEFLATE: Round-Trip mit 500 zufälligen und strukturierten Eingaben; Kompatibilität in
-  beide Richtungen mit `zlib` (eigene Ausgabe wird von `zlib` gelesen und umgekehrt);
-  Kompressionsrate höchstens 10 % schlechter als `zlib` Stufe 6 auf Textkorpora.
-- PNG: Testbilder aller Farbtypen werden selbst erzeugt (u. a. über `zlib` als
-  Referenz-Encoder) und Pixel für Pixel verglichen; Fehlerfälle (falsche CRC,
-  abgeschnittene Datei).
-- JPEG: Encoder → Decoder Round-Trip mit PSNR-Schwellen je Qualitätsstufe;
-  IDCT-Genauigkeit gegen die Referenz-DCT.
-- GIF: Round-Trip inklusive Animationen.
-- Leistungstest: Kompression von 1 MB in akzeptabler Zeit (Ergebnis dokumentieren).
-- Mindestens 250 Testfälle.
+## Test Strategy (pytest)
+- DEFLATE: round trip with 500 random and structured inputs; compatibility in both
+  directions with `zlib` (your output is read by `zlib` and vice versa); compression
+  ratio at most 10 % worse than `zlib` level 6 on text corpora.
+- PNG: test images of all color types are generated yourself (e.g. with `zlib` as a
+  reference encoder) and compared pixel by pixel; error cases (wrong CRC, truncated file).
+- JPEG: encoder → decoder round trip with PSNR thresholds per quality level; IDCT
+  accuracy against the reference DCT.
+- GIF: round trip including animations.
+- Performance test: compressing 1 MB in acceptable time (document the result).
+- At least 250 test cases.
 
-## Abnahmekriterien
-- `python3 -m pytest -q` grün; Formate und Algorithmen in DESIGN.md dokumentiert.
+## Acceptance Criteria
+- `python3 -m pytest -q` passes; formats and algorithms documented in DESIGN.md.
 
-Arbeite test-driven: zuerst Tests, nach jedem Feature alle Tests ausführen, DESIGN.md und
-PROGRESS.md laufend pflegen. Höre erst auf, wenn alles fertig ist und alle Tests grün sind.
+Work test-driven: tests first, run all tests after every feature, keep DESIGN.md and
+PROGRESS.md up to date. Do not stop until everything is finished and all tests pass.

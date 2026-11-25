@@ -121,8 +121,12 @@ class Manager:
             self.builtin_loaded = st.get("builtin_loaded")
             if self.builtin_loaded is None:  # ältere state.json: anhand der Titel erkennen
                 titles = {t["title"] for t in self.tasks.values()}
-                self.builtin_loaded = [os.path.basename(p) for p in self._builtin_files()
-                                       if self._read_task_file(p)[0] in titles]
+                self.builtin_loaded = []
+                for p in self._builtin_files():
+                    title, _, opts = self._read_task_file(p)
+                    if title in titles or opts.get("legacy_title") in titles:
+                        self.builtin_loaded.append(os.path.basename(p))
+            self._refresh_builtin_tasks()
             n = self._add_builtin_tasks()
             if n:
                 self.event(f"{n} neue eingebaute Aufgabe(n) zur Queue hinzugefügt")
@@ -163,10 +167,45 @@ class Manager:
                 if ":" in line:
                     k, v = line.split(":", 1)
                     v = v.strip()
+                    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                        v = v[1:-1]
                     opts[k.strip()] = {"true": True, "false": False}.get(v.lower(), v)
             text = text[m.end():]
         title, body = cls._split_title(text, os.path.basename(path))
         return title, body, opts
+
+    def _refresh_builtin_tasks(self):
+        """Übernimmt geänderte Texte eingebauter Aufgaben (z. B. Übersetzung) für Aufgaben,
+        die noch nicht begonnen wurden. Begonnene behalten ihren Text."""
+        updated = 0
+        for path in self._builtin_files():
+            name = os.path.basename(path)
+            if name not in self.builtin_loaded:
+                continue
+            title, body, opts = self._read_task_file(path)
+            names = {title, opts.get("legacy_title")}
+            t = next((t for t in self.tasks.values() if t.get("builtin_file") == name), None) \
+                or next((t for t in self.tasks.values() if t.get("source") == "eingebaut"
+                         and not t.get("builtin_file") and t["title"] in names), None)
+            if t is None:
+                continue
+            t["builtin_file"] = name
+            started = (t["status"] != "wartet" or t.get("resume") or t.get("stats")
+                       or os.path.isdir(os.path.join(self.ws_dir, t["id"])))
+            if started:
+                continue
+            try:
+                old = self.get_prompt(t["id"])
+            except OSError:
+                old = None
+            if old != body or t["title"] != title:
+                with open(os.path.join(self.task_dir(t["id"]), "task.md"), "w",
+                          encoding="utf-8") as f:
+                    f.write(body)
+                t["title"] = title
+                updated += 1
+        if updated:
+            self.event(f"{updated} wartende eingebaute Aufgabe(n) mit neuem Text aktualisiert")
 
     def _add_builtin_tasks(self):
         """Fügt alle noch nicht geladenen tasks/*.md hinzu. -> Anzahl."""
@@ -178,8 +217,10 @@ class Manager:
             title, body, opts = self._read_task_file(path)
             key = re.sub(r"^\d+[_-]", "", os.path.splitext(name)[0])
             topic = opts.get("topic") or BUILTIN_TOPICS.get(key.split("_")[0], key)
-            self.add_task(title, body, topic=topic, source="eingebaut",
-                          mode=opts.get("mode", "single"), spec_docs=opts.get("spec_docs"))
+            tid = self.add_task(title, body, topic=topic, source="eingebaut",
+                                mode=opts.get("mode", "single"),
+                                spec_docs=opts.get("spec_docs"))
+            self.tasks[tid]["builtin_file"] = name
             self.builtin_loaded.append(name)
             n += 1
         return n

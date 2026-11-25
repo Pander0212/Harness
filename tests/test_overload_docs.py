@@ -93,7 +93,7 @@ PLAN = "# TESTPLAN\n" + "Testfall " * 50
 def doc_brain(kw):
     if "tools" not in kw:
         last = kw["messages"][-1]["content"]
-        return resp(content=PLAN if "Testkatalog" in last else SPEC)
+        return resp(content=PLAN if "test catalog" in last else SPEC)
     return finish()
 
 
