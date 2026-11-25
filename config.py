@@ -19,6 +19,8 @@ DEFAULTS = {
     "max_output_tokens": 16384,
     "temperature": None,
     "request_timeout": 900,
+    "stream": True,              # Antworten streamen (Live-Fortschritt, Hänger-Erkennung)
+    "stall_timeout": 300,        # Streaming: so viele Sekunden ohne Daten = Hänger
     "tool_output_limit": 15000,
     "bash_timeout": 600,
     "bash_max_timeout": 3600,

@@ -173,7 +173,7 @@ class SubagentManager:
             kids = list(self.children.items())
         return [{"name": n, "status": c.status, "calls": c.stats["calls"],
                  "tool_calls": c.stats["tool_calls"], "context_tokens": c.context_tokens,
-                 "cost_usd": c.stats["cost_usd"], "scope": [os.path.relpath(s, c.workspace)
+                 "cost_usd": c.stats["cost_usd"], "request": c.request_status(), "scope": [os.path.relpath(s, c.workspace)
                                                             for s in (c.scope or [])],
                  "last": (list(c.logs)[-1] if c.logs else "")} for n, c in kids]
 

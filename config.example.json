@@ -10,6 +10,8 @@
   "max_output_tokens": 16384,
   "temperature": null,
   "request_timeout": 900,
+  "stream": true,
+  "stall_timeout": 300,
   "tool_output_limit": 15000,
   "bash_timeout": 600,
   "bash_max_timeout": 3600,

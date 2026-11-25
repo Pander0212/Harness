@@ -132,6 +132,8 @@ async function act(a, id, extra) {
 }
 async function toggleEndless() { await api("/api/endless", {on: !S.endless_mode}); refresh(); }
 async function togglePause() { await api("/api/pause", {on: !S.paused}); refresh(); }
+async function resetThrottle() { await api("/api/throttle_reset", {}); refresh(); }
+const fmtReq = r => r ? `<div class="small">⇄ ${esc(r.label)} · ${r.seconds}s · ~${fmtN(r.tokens)} Tok.</div>` : "";
 async function clearAuth() { await api("/api/clear_auth", {}); refresh(); }
 async function addTask() {
   const prompt = $("newPrompt").value.trim(); if (!prompt) return alert("Text fehlt");
@@ -208,7 +210,7 @@ function render() {
   if (S.sandbox_ok) b += `<div class="banner ok">Sandbox aktiv: ${esc(S.sandbox_msg)}</div>`;
   else if (!S.config_problem && !sandboxHidden()) b += `<div class="banner warn"><b>Achtung:</b> bash-Befehle der Agenten laufen NICHT abgeschottet (${esc(S.sandbox_msg)}). <button onclick="hideSandbox()">Ausblenden</button></div>`;
   if (S.shell_msg) b += `<div class="banner err">${esc(S.shell_msg)}</div>`;
-  if (S.throttle_note) b += `<div class="banner warn">${esc(S.throttle_note)}</div>`;
+  if (S.throttle_note || S.effective_parallel < S.max_parallel) b += `<div class="banner warn">${esc(S.throttle_note || "Parallelität gedrosselt")} (aktuell ${S.effective_parallel} von ${S.max_parallel}) <button onclick="resetThrottle()">Drosselung zurücksetzen</button></div>`;
   if (S.gen_error) b += `<div class="banner warn">Generator: ${esc(S.gen_error)}</div>`;
   $("banners").innerHTML = b;
 
@@ -231,7 +233,7 @@ function render() {
     const subInfo = s.subagents ? ` · ${s.subagents} Subagenten` : "";
     const row = `<tr><td><b>${esc(x.title)}</b>${badge}<div class="small">${esc(x.topic)} · ${esc(x.source)}${subInfo}${x.note ? " · " + esc(x.note) : ""}</div>
       ${x.last_error ? `<div class="small err">${esc(x.last_error)}</div>` : ""}</td>
-      <td class="${statusClass(x.status)}">${esc(status)}</td>
+      <td class="${statusClass(x.status)}">${esc(status)}${fmtReq(x.request)}</td>
       <td class="num">${x.running ? fmtN(s.context_tokens) : "–"}</td>
       <td class="num">${s.calls||0}</td><td class="num">${s.tool_calls||0}</td><td class="num">${s.retries||0}</td>
       <td class="num">${s.compressions||0}</td>
@@ -241,7 +243,7 @@ function render() {
     const log = openLogs.has(x.id) ? `<tr><td colspan="11"><pre class="log">${esc((x.logs||[]).join("\n") || "(kein Log)")}</pre></td></tr>` : "";
     const subs = (x.subagents_live || []).map(c => `<tr class="sub"><td>↳ <b>${esc(c.name)}</b>
       <div class="small">scope: ${esc((c.scope || []).join(", ") || "Workspace")}</div>
-      <div class="small">${esc(c.last)}</div></td><td class="${statusClass(c.status)}">${esc(c.status)}</td>
+      <div class="small">${esc(c.last)}</div></td><td class="${statusClass(c.status)}">${esc(c.status)}${fmtReq(c.request)}</td>
       <td class="num">${fmtN(c.context_tokens)}</td><td class="num">${c.calls}</td><td class="num">${c.tool_calls}</td>
       <td colspan="3"></td><td class="num">${fmtUsd(c.cost_usd)}</td><td colspan="2"></td></tr>`).join("");
     return row + subs + log;

@@ -35,8 +35,15 @@ def slugify(text):
 
 def make_client(cfg):
     from openai import OpenAI
+    total = float(cfg["request_timeout"])
+    read = float(cfg.get("stall_timeout", 300)) if cfg.get("stream", True) else total
+    try:  # Timeout-Klasse der jeweiligen openai-Version (httpx bzw. Nachfolger)
+        from openai import Timeout
+        timeout = Timeout(total, connect=30.0, read=read)
+    except Exception:
+        timeout = read
     return OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"],
-                  timeout=float(cfg["request_timeout"]), max_retries=0)
+                  timeout=timeout, max_retries=0)
 
 
 class Manager:
@@ -308,6 +315,13 @@ class Manager:
                 self.throttle_note = ""
                 self.error_times.clear()
 
+    def reset_throttle(self):
+        with self.lock:
+            self.effective_parallel = int(self.cfg["max_parallel"])
+            self.error_times.clear()
+            self.throttle_note = ""
+            self.event(f"Drosselung zurückgesetzt – Parallelität {self.effective_parallel}")
+
     def clear_auth(self):
         with self.lock:
             self.auth_error = ""
@@ -366,20 +380,23 @@ class Manager:
             if self.shutting_down or self.paused or self.auth_error or self.config_problem():
                 return
             while self.queue and len(self.agents) < self.effective_parallel:
-                self._start(self.queue.pop(0))
+                if self._start(self.queue.pop(0)) is False:
+                    break  # nie in einer Schleife hängen bleiben
             if (self.cfg["endless_mode"] and not self.queue and not self.generating
                     and len(self.agents) < self.effective_parallel
                     and now >= self.next_gen_time):
                 self._start_generator()
 
     def _start(self, tid):
+        """Startet eine Aufgabe. False, wenn das nicht möglich war (Aufgabe bleibt vorn)."""
         t = self.tasks[tid]
         try:
             client = self._get_client()
         except Exception as e:
             self.auth_error = f"API-Client konnte nicht erstellt werden: {e}"
+            self.event(self.auth_error)
             self.queue.insert(0, tid)
-            return
+            return False
         task = {"id": tid, "title": t["title"], "prompt": self.get_prompt(tid),
                 "mode": t.get("mode", "single")}
         ag = Agent(task, self.cfg, client, os.path.join(self.ws_dir, tid), self.task_dir(tid),
@@ -506,13 +523,19 @@ class Manager:
         return hist
 
     def _start_generator(self):
+        try:
+            client = self._get_client()
+        except Exception as e:
+            self.auth_error = f"API-Client konnte nicht erstellt werden: {e}"
+            self.event(self.auth_error)
+            return
         self.generating = True
         hist = self._all_history()
         example = self._example_task()
         gdir = os.path.join(self.data_dir, "generator")
         task = {"id": "_generator", "title": "Aufgaben-Generator", "prompt": "",
                 "mode": "generator"}
-        ag = Agent(task, self.cfg, self._get_client(), os.path.join(gdir, "ws"), gdir,
+        ag = Agent(task, self.cfg, client, os.path.join(gdir, "ws"), gdir,
                    resume=True, sleep=self.agent_sleep, clock=self.clock)
         self.gen_agent = ag
         self.event("Queue leer – generiere neue Aufgabe")
@@ -623,6 +646,7 @@ class Manager:
                     "running": ag is not None, "weak": t.get("weak", False),
                     "mode": t.get("mode", "single"),
                     "subagents_live": ag.subs.info() if ag else [],
+                    "request": ag.request_status() if ag else None,
                     "queue_pos": self.queue.index(tid) + 1 if tid in self.queue else None,
                     "stats": st, "last_error": (ag.stats.get("last_error") if ag else
                                                 t.get("last_error")) or "",

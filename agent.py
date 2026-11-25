@@ -217,7 +217,7 @@ def classify_error(exc):
 OVERLOAD_STATUS = (429, 502, 503, 504, 529)
 OVERLOAD_RE = re.compile(r"\bbusy\b|overload|over capacity|at capacity|try again|"
                          r"temporarily unavailable|service unavailable|too many requests|"
-                         r"rate.?limit|server is overloaded", re.I)
+                         r"rate.?limit|server is overloaded|timed out|timeout", re.I)
 # strenger für normalen Antworttext (damit echte Antworten nicht verwechselt werden)
 OVERLOAD_TEXT_RE = re.compile(r"\bis (currently )?busy\b|overloaded|over capacity|"
                               r"please try again (later|in a)|temporarily unavailable|"
@@ -247,6 +247,14 @@ def describe_error(exc):
     name = type(exc).__name__
     text = str(exc).strip().replace("\n", " ")[:500]
     return f"{name}{f' (HTTP {st})' if st else ''}: {text}"
+
+
+STREAM_OPTIONS = {"ok": True}
+
+
+class _NS:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
 
 
 def _get(obj, name, default=None):
@@ -305,6 +313,8 @@ class Agent:
         self.no_tool_streak = 0
         self.run_start = None
         self.finished_summary = None
+        self.req_info = None          # laufende Anfrage (für die Live-Anzeige)
+        self.req_label = "Antwort"
         self.subs = SubagentManager(self)
 
     # ------------------------------------------------------------- Statistik/Logs
@@ -372,6 +382,7 @@ class Agent:
         cached = int(_get(details, "cached_tokens", 0) or 0)
         if not usage:
             pt = self._estimate_tokens(sent_messages)
+            ct = int((_get(resp, "out_chars", 0) or 0) / 3.5)
         self.stats["prompt_tokens"] += pt
         self.stats["completion_tokens"] += ct
         self.stats["cached_tokens"] += cached
@@ -386,6 +397,14 @@ class Agent:
 
     def tools(self):
         return TOOLS + SUBAGENT_TOOLS if self.subagents_allowed() else TOOLS
+
+    def request_status(self):
+        """Laufende Anfrage für das UI: Bezeichnung, Sekunden, empfangene Tokens (ca.)."""
+        r = self.req_info
+        if not r:
+            return None
+        return {"label": r["label"], "seconds": round(self.clock() - r["started"]),
+                "tokens": int(r["chars"] / 3.5)}
 
     def live_stats(self):
         """Eigene Statistik plus laufende Subagenten."""
@@ -403,7 +422,93 @@ class Agent:
             kwargs["max_tokens"] = int(self.cfg["max_output_tokens"])
         if self.cfg.get("temperature") is not None:
             kwargs["temperature"] = self.cfg["temperature"]
-        return self.client.chat.completions.create(**kwargs)
+        create = self.client.chat.completions.create
+        self.req_info = {"label": self.req_label, "started": self.clock(), "chars": 0}
+        try:
+            if not self.cfg.get("stream", True):
+                return create(**kwargs)
+            kwargs["stream"] = True
+            if STREAM_OPTIONS["ok"]:
+                kwargs["stream_options"] = {"include_usage": True}
+            try:
+                result = create(**kwargs)
+            except Exception as e:
+                if "stream_options" in kwargs and error_status(e) in (400, 422) \
+                        and "stream" in str(e).lower():
+                    STREAM_OPTIONS["ok"] = False  # Anbieter kennt stream_options nicht
+                    kwargs.pop("stream_options")
+                    result = create(**kwargs)
+                else:
+                    raise
+            if _get(result, "choices") is not None or _get(result, "error") is not None:
+                return result  # Anbieter hat trotz stream=True eine normale Antwort geschickt
+            return self._collect_stream(result, messages)
+        finally:
+            self.req_info = None
+
+    def _collect_stream(self, stream, messages=None):
+        """Setzt eine gestreamte Antwort zusammen; zeigt den Fortschritt live an."""
+        content, calls, refusal = [], {}, ""
+        fr, usage, nchars = None, None, 0
+        try:
+            for chunk in stream:
+                if self.stop_event.is_set():
+                    raise StoppedError("gestoppt")
+                u = _get(chunk, "usage")
+                if u:
+                    usage = u
+                for ch in _get(chunk, "choices") or []:
+                    d = _get(ch, "delta") or _get(ch, "message")
+                    c = _get(d, "content")
+                    if isinstance(c, str) and c:
+                        content.append(c)
+                        nchars += len(c)
+                    r = _get(d, "reasoning_content") or _get(d, "reasoning")
+                    if isinstance(r, str):
+                        nchars += len(r)
+                    rf = _get(d, "refusal")
+                    if rf:
+                        refusal += rf
+                    for tc in _get(d, "tool_calls") or []:
+                        i = _get(tc, "index", 0) or 0
+                        slot = calls.setdefault(i, {"id": None, "name": "", "arguments": ""})
+                        if _get(tc, "id"):
+                            slot["id"] = _get(tc, "id")
+                        fn = _get(tc, "function")
+                        if _get(fn, "name"):
+                            slot["name"] += _get(fn, "name")
+                        a = _get(fn, "arguments")
+                        if a:
+                            slot["arguments"] += a
+                            nchars += len(a)
+                    f = _get(ch, "finish_reason")
+                    if f:
+                        fr = f
+                if self.req_info is not None:
+                    self.req_info["chars"] = nchars
+        except StoppedError:
+            raise
+        except Exception as e:
+            text = "".join(content)
+            if nchars and messages is not None:  # empfangene Tokens trotzdem verbuchen
+                self._account(_NS(usage=None, out_chars=nchars), messages)
+            if text.strip():
+                raise IncompleteResponse(f"Stream abgebrochen: {describe_error(e)}", text)
+            raise
+        finally:
+            close = getattr(stream, "close", None)
+            if close:
+                try:
+                    close()
+                except Exception:
+                    pass
+        tcs = [_NS(id=c["id"], type="function",
+                   function=_NS(name=c["name"], arguments=c["arguments"] or "{}"))
+               for _, c in sorted(calls.items())]
+        msg = _NS(content="".join(content), tool_calls=tcs or None, refusal=refusal or None)
+        return _NS(choices=[_NS(message=msg, finish_reason=fr)] if (content or tcs or fr
+                                                                     or refusal) else [],
+                   usage=usage, out_chars=nchars)
 
     def _parse(self, resp):
         choices = _get(resp, "choices") or []
@@ -582,6 +687,7 @@ class Agent:
                     self._add({"role": "assistant", "content": f.read()}, msgs)
                 continue
             self.status = f"erstellt {fname}"
+            self.req_label = fname
             self.log(f"Erzeuge docs/{fname} (Ziel ca. {words} Wörter)")
             start = len(msgs)
             text, _ = self.request("docs", msgs, with_tools=False)
@@ -593,6 +699,7 @@ class Agent:
                 f.write(full + "\n")
             self.log(f"docs/{fname} fertig ({len(full.split())} Wörter)")
         self.status = "läuft"
+        self.req_label = "Antwort"
         self.save_stats()
 
     def _workspace_snapshot(self):

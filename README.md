@@ -209,6 +209,8 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `max_hours` | 36 | maximale aktive Laufzeit je Aufgabe |
 | `context_limit` / `compress_at` | 200000 / 170000 | Kontextgröße / Schwelle für Komprimierung |
 | `max_output_tokens` | 16384 | `max_tokens` pro Antwort |
+| `stream` | true | Antworten streamen: Live-Fortschritt im UI, Hänger-Erkennung |
+| `stall_timeout` | 300 | so viele Sekunden ohne neue Daten gelten als Hänger → neuer Versuch |
 | `tool_output_limit` | 15000 | Kürzung der Tool-Ausgaben (Anfang + Ende) |
 | `bash_timeout` / `bash_max_timeout` | 600 / 3600 | Sekunden |
 | `max_retries` | 10 | Wiederholungen pro Anfrage (im UI 0–100) |
@@ -305,8 +307,13 @@ Schwarm-Modus gestartet.
   Einstellungen gespeichert wurden (oder „Sperre aufheben“).
 - Nach allen erfolglosen Wiederholungen: Status „fehler“, Workspace bleibt erhalten,
   sofort startet die nächste Aufgabe. „Fortsetzen“ nimmt sie später wieder auf.
+- Streaming: Das UI zeigt bei jeder laufenden Anfrage Bezeichnung, Dauer und bisher
+  empfangene Tokens (z. B. „⇄ SPEC.md · 45s · ~3,1 k Tok.“). Kommen `stall_timeout`
+  Sekunden lang keine Daten, wird neu versucht; bereits empfangener Text bleibt
+  erhalten und wird mit `continue` fortgesetzt.
 - 3 Abbrüche innerhalb von 10 Minuten senken die Parallelität um 1 (Anzeige im UI);
-  nach 30 fehlerfreien Minuten wird sie schrittweise wieder erhöht.
+  nach 30 fehlerfreien Minuten wird sie schrittweise wieder erhöht. Mit dem Button
+  „Drosselung zurücksetzen“ im UI sofort wieder volle Parallelität.
 
 ### Endlosmodus und Aufgaben-Generator
 Ist die Queue leer, erzeugt ein Generator-Aufruf eine neue, ausführliche

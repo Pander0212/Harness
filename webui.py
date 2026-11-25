@@ -148,6 +148,9 @@ class UIServer:
         if path == "/api/pause":
             m.set_paused(d.get("on"))
             return {"ok": True}
+        if path == "/api/throttle_reset":
+            m.reset_throttle()
+            return {"ok": True}
         if path == "/api/clear_auth":
             m.clear_auth()
             return {"ok": True}

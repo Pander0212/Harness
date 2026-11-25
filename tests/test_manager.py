@@ -335,3 +335,23 @@ def test_snapshot_shows_live_subagents(cfg, tmp_path):
     go.set()
     wait_idle(m)
     assert m.tasks[a]["stats"]["subagents"] == 1
+
+
+def test_client_creation_failure_does_not_hang(cfg, tmp_path):
+    import threading as th
+
+    def broken(c):
+        raise ImportError("No module named 'httpx'")
+    (tmp_path / "t2").mkdir()
+    m = Manager(cfg, client_factory=broken, tasks_dir=str(tmp_path / "t2"))
+    a = m.add_task("A", "x")
+    t = th.Thread(target=m.tick)
+    t.start()
+    t.join(3)
+    assert not t.is_alive()                     # keine Endlosschleife
+    assert "httpx" in m.auth_error and m.queue == [a]
+    cfg.data["endless_mode"] = True
+    m.queue.clear()
+    m.auth_error = ""
+    m.tick()
+    assert not m.generating and "httpx" in m.auth_error
