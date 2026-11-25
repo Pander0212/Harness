@@ -88,6 +88,8 @@ details summary { cursor:pointer; color:var(--dim); }
       <label>Base-URL</label><input id="s_base_url">
       <label>Modell</label><input id="s_model">
       <label>Max. parallele Agenten (1–20)</label><input id="s_max_parallel" type="number" min="1" max="20">
+      <label>Max. Retries pro Anfrage</label><input id="s_max_retries" type="number" min="0" max="100">
+      <label>Wartezeit vor Retry (s, z. B. "5" oder "5,5,10,30")</label><input id="s_retry_delays">
       <label>MAX_HOURS pro Aufgabe</label><input id="s_max_hours" type="number" min="0.1" step="0.5">
       <label>allowed_dirs (eine Zeile pro Ordner)</label><textarea id="s_allowed_dirs" rows="3"></textarea>
       <label>finish nur bei grünen Tests</label><input id="s_verify_on_finish" type="checkbox">
@@ -138,7 +140,8 @@ function fillSettings(force) {
   const c = S.config;
   $("s_api_key").value = ""; $("s_api_key").placeholder = c.api_key ? c.api_key + " (unverändert lassen)" : "nicht gesetzt";
   $("s_base_url").value = c.base_url; $("s_model").value = c.model;
-  $("s_max_parallel").value = c.max_parallel; $("s_max_hours").value = c.max_hours;
+  $("s_max_parallel").value = c.max_parallel;
+  $("s_max_retries").value = c.max_retries; $("s_retry_delays").value = (c.retry_delays || []).join(", "); $("s_max_hours").value = c.max_hours;
   $("s_allowed_dirs").value = (c.allowed_dirs || []).join("\n");
   $("s_verify_on_finish").checked = !!c.verify_on_finish; $("s_archive_finished").checked = !!c.archive_finished;
   $("s_subagents_enabled").checked = !!c.subagents_enabled; $("s_max_subagents").value = c.max_subagents;
@@ -147,7 +150,8 @@ function fillSettings(force) {
 }
 async function saveSettings() {
   const d = {base_url: $("s_base_url").value.trim(), model: $("s_model").value.trim(),
-    max_parallel: parseInt($("s_max_parallel").value || "4"), max_hours: parseFloat($("s_max_hours").value || "36"),
+    max_parallel: parseInt($("s_max_parallel").value || "4"),
+    max_retries: parseInt($("s_max_retries").value || "10"), retry_delays: $("s_retry_delays").value, max_hours: parseFloat($("s_max_hours").value || "36"),
     allowed_dirs: $("s_allowed_dirs").value, verify_on_finish: $("s_verify_on_finish").checked,
     archive_finished: $("s_archive_finished").checked, subagents_enabled: $("s_subagents_enabled").checked,
     max_subagents: parseInt($("s_max_subagents").value || "4"),

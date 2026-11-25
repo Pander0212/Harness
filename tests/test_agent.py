@@ -9,7 +9,7 @@ from fakes import FakeAPIError, FakeClient, FakeTimeout, resp, tool
 TASK = {"id": "t1", "title": "Testaufgabe", "prompt": "Baue etwas."}
 
 
-def make_agent(cfg, client, sleeps, clock=None, resume=False, task=TASK):
+def make_agent(cfg, client, sleeps, clock=None, resume=False, task=TASK):  # noqa: D401
     kw = {}
     if clock:
         kw["clock"] = clock
@@ -290,3 +290,40 @@ def test_stop_event(cfg, sleeps):
     a = make_agent(cfg, client, sleeps)
     a.stop()
     assert a.run()["outcome"] == "stopped"
+
+
+# ------------------------------------------------------------ Retry-Einstellungen
+
+def test_default_retry_policy_10_times_5s(cfg, sleeps):
+    from config import DEFAULTS
+    cfg.data["max_retries"] = DEFAULTS["max_retries"]
+    cfg.data["retry_delays"] = DEFAULTS["retry_delays"]
+    refused = resp(content="", finish_reason="content_filter")
+    client = FakeClient([refused] * 10 + [finish()])
+    a = make_agent(cfg, client, sleeps)
+    assert a.run()["outcome"] == "finished"
+    assert sleeps == [5] * 10
+    assert a.stats["retries"] == 10
+    client = FakeClient([refused] * 11 + [finish()])
+    sleeps.clear()
+    assert make_agent(cfg, client, sleeps, task={"id": "t2", "title": "x", "prompt": "y"}
+                      ).run()["outcome"] == "error"
+
+
+def test_retry_after_header_respected(cfg, sleeps):
+    from types import SimpleNamespace as NS
+    cfg.data["retry_delays"] = [5]
+    e = FakeAPIError(429, "rate limit")
+    e.response = NS(status_code=429, headers={"retry-after": "30"})
+    huge = FakeAPIError(429, "rate limit")
+    huge.response = NS(status_code=429, headers={"retry-after": "9999"})
+    client = FakeClient([e, huge, FakeAPIError(500), finish()])
+    assert make_agent(cfg, client, sleeps).run()["outcome"] == "finished"
+    assert sleeps == [30, 60, 5]
+
+
+def test_retry_settings_from_ui(cfg):
+    cfg.update({"max_retries": "25", "retry_delays": "5, 5; 10,30"})
+    assert cfg["max_retries"] == 25 and cfg["retry_delays"] == [5, 5, 10, 30]
+    cfg.update({"max_retries": 1000, "retry_delays": ""})
+    assert cfg["max_retries"] == 100 and cfg["retry_delays"] == [5]

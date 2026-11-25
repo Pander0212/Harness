@@ -210,7 +210,9 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `max_output_tokens` | 16384 | `max_tokens` pro Antwort |
 | `tool_output_limit` | 15000 | Kürzung der Tool-Ausgaben (Anfang + Ende) |
 | `bash_timeout` / `bash_max_timeout` | 600 / 3600 | Sekunden |
-| `retry_delays` | [10,20,40,60] | Wartezeiten vor Wiederholung 1–4 |
+| `max_retries` | 10 | Wiederholungen pro Anfrage (im UI 0–100) |
+| `retry_delays` | [5] | Wartezeit(en) in s vor Wiederholung 1, 2, …; der letzte Wert gilt weiter |
+| `retry_after_max` | 60 | bei 429 mit `Retry-After`: höchstens so lange warten |
 | `allowed_dirs` | ["./workspaces"] | beschreibbare/lesbare Ordner |
 | `endless_mode` | true | bei leerer Queue neue Aufgaben generieren |
 | `verify_on_finish` | true | `finish` nur akzeptieren, wenn `pytest` grün ist |
@@ -273,13 +275,14 @@ Schwarm-Modus gestartet.
 
 ### Fehlerbehandlung
 - 429, 5xx, Timeouts, Verbindungsfehler, leere/abgelehnte/abgebrochene Antworten:
-  bis zu 4 Wiederholungen nach 10 s, 20 s, 40 s, 60 s. War eine Antwort
+  bis zu 10 Wiederholungen im Abstand von 5 s (beides im UI einstellbar). Schickt
+  der Anbieter bei 429 einen `Retry-After`-Header, wird so lange gewartet (max. 60 s). War eine Antwort
   abgeschnitten, wird der Teil übernommen und `continue` angehängt.
 - Kontext zu lang (400/413 mit „context/token/length“): erst komprimieren, dann
   erneut senden.
 - 401/403: sofortiger Abbruch, rotes Banner im UI, **keine** weiteren Starts, bis die
   Einstellungen gespeichert wurden (oder „Sperre aufheben“).
-- Nach 4 erfolglosen Wiederholungen: Status „fehler“, Workspace bleibt erhalten,
+- Nach allen erfolglosen Wiederholungen: Status „fehler“, Workspace bleibt erhalten,
   sofort startet die nächste Aufgabe. „Fortsetzen“ nimmt sie später wieder auf.
 - 3 Abbrüche innerhalb von 10 Minuten senken die Parallelität um 1 (Anzeige im UI);
   nach 30 fehlerfreien Minuten wird sie schrittweise wieder erhöht.
@@ -312,7 +315,7 @@ archive/<id>.tar.gz              archivierte Workspaces (optional)
 ## Web-Oberfläche
 - Oben: Tokens gesamt, verdiente $ gesamt, $ pro Stunde (gleitender Schnitt der
   letzten Stunde), Hochrechnung auf 24 h, Parallelität, Queue-Länge.
-- Pro Aufgabe: Status (wartet / läuft / retry x/4 / fertig / fehler / schwach /
+- Pro Aufgabe: Status (wartet / läuft / retry x/10 / fertig / fehler / schwach /
   gestoppt), aktueller Kontext, Calls, Tool-Calls, Retries, Komprimierungen, Tokens,
   Kosten, Laufzeit, letzte Fehlermeldung, Log (letzte 30 Zeilen).
 - Buttons: Start (sofort), Stop, Neustart (Workspace verwerfen), Fortsetzen,
@@ -326,7 +329,7 @@ archive/<id>.tar.gz              archivierte Workspaces (optional)
 .venv/bin/python -m pytest tests -q
 ```
 
-Die Tests verwenden einen Fake-API-Client und prüfen u. a. die 4 Wiederholungen mit
+Die Tests verwenden einen Fake-API-Client und prüfen u. a. die Wiederholungen mit
 Wartezeiten und `continue`, Auth-Sperre, Abbruch und Weiterschalten, Drosselung und
 Erholung, Pfadschutz (`..`, Symlinks), Kürzung, Komprimierung, Queue, Generator,
 Fortsetzen nach Neustart, Subagenten/Schwarm (echte Parallelität, Scope-Schutz,

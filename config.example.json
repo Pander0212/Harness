@@ -14,13 +14,11 @@
   "bash_timeout": 600,
   "bash_max_timeout": 3600,
   "max_no_tool_replies": 4,
-  "max_retries": 4,
+  "max_retries": 10,
   "retry_delays": [
-    10,
-    20,
-    40,
-    60
+    5
   ],
+  "retry_after_max": 60,
   "allowed_dirs": [
     "./workspaces"
   ],

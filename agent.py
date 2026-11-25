@@ -169,6 +169,18 @@ def classify_error(exc):
     return "retry"
 
 
+def retry_after(exc):
+    """Sekunden aus dem Retry-After-Header (nur bei 429/503), sonst None."""
+    if error_status(exc) not in (429, 503):
+        return None
+    headers = getattr(getattr(exc, "response", None), "headers", None) or {}
+    try:
+        v = headers.get("retry-after") or headers.get("Retry-After")
+        return max(0.0, float(v)) if v is not None else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def describe_error(exc):
     st = error_status(exc)
     name = type(exc).__name__
@@ -363,7 +375,7 @@ class Agent:
         """Ein Modellaufruf mit bis zu max_retries Wiederholungen.
         purpose='main' arbeitet auf self.messages (kann komprimieren)."""
         max_retries = int(self.cfg["max_retries"])
-        delays = list(self.cfg["retry_delays"]) or [10]
+        delays = list(self.cfg["retry_delays"]) or [5]
         attempt = 0
         while True:
             self._check_stop()
@@ -406,6 +418,9 @@ class Agent:
                     self._add({"role": "user", "content": "continue"}, target)
                 self.save_stats()
                 delay = delays[min(attempt - 1, len(delays) - 1)]
+                ra = retry_after(e)
+                if ra is not None:  # Rate-Limit: Vorgabe des Anbieters respektieren
+                    delay = max(delay, min(ra, float(self.cfg.get("retry_after_max", 60))))
                 self.sleep(delay)
                 self._check_stop()
 

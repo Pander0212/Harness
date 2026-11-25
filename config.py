@@ -23,8 +23,9 @@ DEFAULTS = {
     "bash_timeout": 600,
     "bash_max_timeout": 3600,
     "max_no_tool_replies": 4,
-    "max_retries": 4,
-    "retry_delays": [10, 20, 40, 60],
+    "max_retries": 10,
+    "retry_delays": [5],         # Wartezeit vor Retry 1, 2, ...; letzter Wert gilt weiter
+    "retry_after_max": 60,       # 429 mit Retry-After: höchstens so lange warten
     "allowed_dirs": ["./workspaces"],
     "workspaces_dir": "./workspaces",
     "data_dir": "./data",
@@ -61,6 +62,7 @@ EDITABLE = {
     "allowed_dirs": list, "max_hours": float, "endless_mode": bool,
     "archive_finished": bool, "verify_on_finish": bool, "subagents_enabled": bool,
     "max_subagents": int, "max_total_subagents": int, "swarm_ratio": float,
+    "max_retries": int, "retry_delays": list,
 }
 
 _lock = threading.Lock()
@@ -109,7 +111,14 @@ class Config:
             typ = EDITABLE[k]
             if k == "api_key" and (v is None or v == "" or "•" in str(v)):
                 continue  # maskierter Key -> unverändert lassen
-            if typ is list:
+            if k == "retry_delays":
+                if isinstance(v, str):
+                    v = v.replace(";", ",").split(",")
+                if not isinstance(v, list):
+                    v = [v]
+                v = [max(0.0, min(float(x), 600.0)) for x in v if str(x).strip()] or [5.0]
+                v = [int(x) if x == int(x) else x for x in v]
+            elif typ is list:
                 if isinstance(v, str):
                     v = [x.strip() for x in v.splitlines() if x.strip()]
                 v = [str(x) for x in v]
@@ -117,6 +126,8 @@ class Config:
                 v = bool(v)
             else:
                 v = typ(v)
+            if k == "max_retries":
+                v = max(0, min(int(v), 100))
             if k in ("max_subagents", "max_total_subagents"):
                 v = max(1, min(int(v), 20))
             if k == "swarm_ratio":

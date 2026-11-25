@@ -34,6 +34,7 @@ def cfg(tmp_path):
         "archive_dir": str(tmp_path / "archive"),
         "allowed_dirs": [str(tmp_path / "ws")], "sandbox": "none",
         "verify_on_finish": False, "endless_mode": False,
+        "max_retries": 4, "retry_delays": [10, 20, 40, 60],
     })
     c.save()
     return c
