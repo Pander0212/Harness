@@ -327,3 +327,30 @@ def test_retry_settings_from_ui(cfg):
     assert cfg["max_retries"] == 25 and cfg["retry_delays"] == [5, 5, 10, 30]
     cfg.update({"max_retries": 1000, "retry_delays": ""})
     assert cfg["max_retries"] == 100 and cfg["retry_delays"] == [5]
+
+
+# ------------------------------------------------------------ Ausgabelimit
+
+def test_truncated_tool_call_gets_split_hint(cfg, sleeps):
+    cfg.data["max_output_tokens"] = 8192
+    cut = resp(calls=[("write_file", '{"path": "big.py", "content": "def a():\\n  ...')],
+               finish_reason="length")
+    client = FakeClient([cut, finish()])
+    a = make_agent(cfg, client, sleeps)
+    assert a.run()["outcome"] == "finished"
+    last = client.requests[1]["messages"][-1]
+    assert last["role"] == "user" and "8192" in last["content"]
+    assert "append=true" in last["content"]
+    assert not os.path.exists(os.path.join(a.workspace, "big.py"))   # nicht ausgeführt
+    assert "8192 Tokens begrenzt" in client.requests[0]["messages"][0]["content"]
+
+
+def test_write_file_append(cfg, sleeps):
+    client = FakeClient([tool("write_file", path="m.py", content="teil1\n"),
+                         tool("write_file", path="m.py", content="teil2\n", append=True),
+                         finish()])
+    a = make_agent(cfg, client, sleeps)
+    a.run()
+    assert open(os.path.join(a.workspace, "m.py")).read() == "teil1\nteil2\n"
+    res = [m["content"] for m in client.requests[-1]["messages"] if m["role"] == "tool"]
+    assert "angehängt" in res[1]

@@ -25,6 +25,9 @@ UMGEBUNG
 - Dein Arbeitsverzeichnis (Workspace): {workspace}
 - Alle bash-Befehle laufen in diesem Verzeichnis. {sandbox_note}
 - Werkzeuge: bash (Shell-Befehl mit Timeout), read_file, write_file, list_dir, finish.
+- Jede deiner Antworten ist auf {max_out} Tokens begrenzt (inklusive Tool-Call-Argumente). \
+Schreibe große Dateien deshalb in Teilen: write_file für den ersten Teil, dann \
+write_file mit append=true (je höchstens ca. 300 Zeilen), oder teile Code in Module auf.
 - Tool-Ausgaben werden auf {limit} Zeichen gekürzt (Anfang + Ende). Filtere große Ausgaben \
 gezielt (z. B. `pytest -q -x`, `| tail -50`, `grep`).
 - Python 3 mit pytest steht zur Verfügung. Nutze nur die Standardbibliothek, außer die \
@@ -101,6 +104,13 @@ DOCS_NOTE = ("Im Ordner docs/ liegen die verbindliche Spezifikation (docs/SPEC.m
              "TESTPLAN.md als pytest-Tests um (IDs als Kommentar) und schlage bei jeder "
              "Unklarheit erneut darin nach. Abweichungen nur mit Begründung in DESIGN.md.")
 
+TRUNCATED_TOOL_MSG = (
+    "Deine letzte Antwort wurde am Ausgabelimit ({limit} Tokens) abgeschnitten; der "
+    "Tool-Call war unvollständig und wurde NICHT ausgeführt. Teile große Inhalte auf: "
+    "schreibe die Datei in mehreren Teilen (erster Teil mit write_file, weitere mit "
+    "write_file und append=true, je höchstens ca. 300 Zeilen) oder zerlege sie in "
+    "mehrere Module. Mache jetzt mit dem ersten Teil weiter.")
+
 NUDGE = ("Du hast keinen Tool-Call verwendet. Arbeite mit den Werkzeugen weiter "
          "(bash, read_file, write_file, list_dir). Wenn wirklich alles fertig ist und "
          "alle Tests grün sind, rufe `finish` auf.")
@@ -125,11 +135,14 @@ TOOLS = [
             "required": ["path"]}}},
     {"type": "function", "function": {
         "name": "write_file",
-        "description": "Schreibt (überschreibt) eine Datei vollständig. Ordner werden "
-                       "automatisch angelegt.",
+        "description": "Schreibt (überschreibt) eine Datei. Mit append=true wird an eine "
+                       "bestehende Datei angehängt – so lassen sich große Dateien in "
+                       "mehreren Teilen schreiben. Ordner werden automatisch angelegt.",
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"},
-            "content": {"type": "string"}},
+            "content": {"type": "string"},
+            "append": {"type": "boolean", "description": "an Datei anhängen statt "
+                                                         "überschreiben"}},
             "required": ["path", "content"]}}},
     {"type": "function", "function": {
         "name": "list_dir",
@@ -169,9 +182,10 @@ class ContextTooLongError(Exception):
 
 
 class IncompleteResponse(Exception):
-    def __init__(self, msg, partial=""):
+    def __init__(self, msg, partial="", tool_truncated=False):
         super().__init__(msg)
         self.partial = partial
+        self.tool_truncated = tool_truncated  # ein Tool-Call wurde abgeschnitten
 
 
 class BadResponse(Exception):
@@ -526,7 +540,8 @@ class Agent:
         if refusal or fr == "content_filter":
             raise BadResponse(f"Antwort abgelehnt ({fr}): {refusal or ''}"[:300])
         if fr == "length":
-            raise IncompleteResponse("Antwort abgebrochen (finish_reason=length)", content)
+            raise IncompleteResponse("Antwort abgebrochen (finish_reason=length)", content,
+                                     tool_truncated=bool(raw_calls))
         calls = []
         for tc in raw_calls:
             fn = _get(tc, "function")
@@ -603,7 +618,11 @@ class Agent:
                     target = None if purpose == "main" else msgs
                     if partial.strip():
                         self._add({"role": "assistant", "content": partial}, target)
-                    self._add({"role": "user", "content": "continue"}, target)
+                    if getattr(e, "tool_truncated", False):
+                        self._add({"role": "user", "content": TRUNCATED_TOOL_MSG.format(
+                            limit=self.cfg.get("max_output_tokens") or "?")}, target)
+                    else:
+                        self._add({"role": "user", "content": "continue"}, target)
                 self.save_stats()
                 delay = delays[min(attempt - 1, len(delays) - 1)]
                 ra = retry_after(e)
@@ -760,9 +779,11 @@ class Agent:
                 or "gesamter Workspace"
             return SUB_SYSTEM_PROMPT.format(workspace=self.workspace, scope=scope,
                                             limit=self.cfg["tool_output_limit"],
+                                            max_out=self.cfg.get("max_output_tokens") or 8000,
                                             max_hours=self.max_hours)
         text = SYSTEM_PROMPT.format(workspace=self.workspace, sandbox_note=note,
                                     limit=self.cfg["tool_output_limit"],
+                                    max_out=self.cfg.get("max_output_tokens") or "ca. 8000",
                                     max_hours=self.max_hours)
         if self.subagents_allowed():
             text += SUBAGENT_PROMPT_SECTION.format(max_sub=self.cfg["max_subagents"])
@@ -848,9 +869,13 @@ class Agent:
         if not isinstance(content, str):
             return "Fehler: 'content' muss ein String sein"
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
+        append = bool(args.get("append"))
+        with open(p, "a" if append else "w", encoding="utf-8") as f:
             f.write(content)
-        return f"OK: {len(content.encode('utf-8'))} Bytes nach {p} geschrieben"
+        n = len(content.encode("utf-8"))
+        if append:
+            return f"OK: {n} Bytes an {p} angehängt (Datei jetzt {os.path.getsize(p)} Bytes)"
+        return f"OK: {n} Bytes nach {p} geschrieben"
 
     def _tool_list(self, args):
         p = self.guard.resolve(args.get("path") or ".")

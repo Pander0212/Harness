@@ -16,7 +16,7 @@ DEFAULTS = {
     "max_hours": 36,
     "context_limit": 200000,
     "compress_at": 170000,
-    "max_output_tokens": 16384,
+    "max_output_tokens": 8192,
     "temperature": None,
     "request_timeout": 900,
     "stream": True,              # Antworten streamen (Live-Fortschritt, Hänger-Erkennung)
@@ -32,7 +32,7 @@ DEFAULTS = {
     "overload_delay": 5,         # Sekunden zwischen Versuchen bei Überlastung
     "retry_jitter": 0.2,         # ±20 % Zufallsstreuung der Wartezeit
     "spec_docs": True,           # vor dem Start SPEC.md + TESTPLAN.md erzeugen
-    "spec_doc_tokens": 12000,    # Zielumfang je Dokument
+    "spec_doc_tokens": 7000,    # Zielumfang je Dokument
     "allowed_dirs": ["./workspaces"],
     "workspaces_dir": "./workspaces",
     "data_dir": "./data",
@@ -72,6 +72,7 @@ EDITABLE = {
     "max_subagents": int, "max_total_subagents": int, "swarm_ratio": float,
     "max_retries": int, "retry_delays": list, "retry_overloaded_forever": bool,
     "overload_delay": float, "spec_docs": bool, "spec_doc_tokens": int,
+    "max_output_tokens": int,
 }
 
 _lock = threading.Lock()
@@ -137,6 +138,8 @@ class Config:
                 v = typ(v)
             if k == "overload_delay":
                 v = max(1.0, min(float(v), 300.0))
+            if k == "max_output_tokens":
+                v = max(256, min(int(v), 200000))
             if k == "spec_doc_tokens":
                 v = max(2000, min(int(v), 30000))
             if k == "max_retries":

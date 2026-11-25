@@ -208,7 +208,7 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `max_parallel` | 4 | gleichzeitige Agenten (im UI 1–20) |
 | `max_hours` | 36 | maximale aktive Laufzeit je Aufgabe |
 | `context_limit` / `compress_at` | 200000 / 170000 | Kontextgröße / Schwelle für Komprimierung |
-| `max_output_tokens` | 16384 | `max_tokens` pro Antwort |
+| `max_output_tokens` | 8192 | `max_tokens` pro Antwort (an das Limit des Modells anpassen) |
 | `stream` | true | Antworten streamen: Live-Fortschritt im UI, Hänger-Erkennung |
 | `stall_timeout` | 300 | so viele Sekunden ohne neue Daten gelten als Hänger → neuer Versuch |
 | `tool_output_limit` | 15000 | Kürzung der Tool-Ausgaben (Anfang + Ende) |
@@ -219,7 +219,7 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `retry_overloaded_forever` | true | bei Überlastung („busy“, 429/502/503/504/529) endlos weiter versuchen |
 | `overload_delay` | 5 | Sekunden zwischen Versuchen bei Überlastung (±`retry_jitter`) |
 | `spec_docs` | true | vor dem Start `docs/SPEC.md` und `docs/TESTPLAN.md` erzeugen |
-| `spec_doc_tokens` | 12000 | Zielumfang je Dokument |
+| `spec_doc_tokens` | 7000 | Zielumfang je Dokument (unter `max_output_tokens` halten) |
 | `allowed_dirs` | ["./workspaces"] | beschreibbare/lesbare Ordner |
 | `endless_mode` | true | bei leerer Queue neue Aufgaben generieren |
 | `verify_on_finish` | true | `finish` nur akzeptieren, wenn `pytest` grün ist |

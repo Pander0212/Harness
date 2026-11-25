@@ -91,6 +91,7 @@ details summary { cursor:pointer; color:var(--dim); }
       <label>Base-URL</label><input id="s_base_url">
       <label>Modell</label><input id="s_model">
       <label>Max. parallele Agenten (1–20)</label><input id="s_max_parallel" type="number" min="1" max="20">
+      <label>Max. Output-Tokens pro Antwort (Modell-Limit)</label><input id="s_max_output_tokens" type="number" min="256" step="256">
       <label>Max. Retries pro Anfrage</label><input id="s_max_retries" type="number" min="0" max="100">
       <label>Wartezeit vor Retry (s, z. B. "5" oder "5,5,10,30")</label><input id="s_retry_delays">
       <label>Bei Überlastung endlos weiter versuchen</label><input id="s_retry_overloaded_forever" type="checkbox">
@@ -153,6 +154,7 @@ function fillSettings(force) {
   $("s_max_parallel").value = c.max_parallel;
   $("s_retry_overloaded_forever").checked = !!c.retry_overloaded_forever; $("s_overload_delay").value = c.overload_delay;
   $("s_spec_docs").checked = !!c.spec_docs; $("s_spec_doc_tokens").value = c.spec_doc_tokens;
+  $("s_max_output_tokens").value = c.max_output_tokens;
   $("s_max_retries").value = c.max_retries; $("s_retry_delays").value = (c.retry_delays || []).join(", "); $("s_max_hours").value = c.max_hours;
   $("s_allowed_dirs").value = (c.allowed_dirs || []).join("\n");
   $("s_verify_on_finish").checked = !!c.verify_on_finish; $("s_archive_finished").checked = !!c.archive_finished;
@@ -164,6 +166,7 @@ async function saveSettings() {
   const d = {base_url: $("s_base_url").value.trim(), model: $("s_model").value.trim(),
     max_parallel: parseInt($("s_max_parallel").value || "4"),
     max_retries: parseInt($("s_max_retries").value || "10"),
+    max_output_tokens: parseInt($("s_max_output_tokens").value || "8192"),
     retry_overloaded_forever: $("s_retry_overloaded_forever").checked,
     overload_delay: parseFloat($("s_overload_delay").value || "5"),
     spec_docs: $("s_spec_docs").checked, spec_doc_tokens: parseInt($("s_spec_doc_tokens").value || "12000"), retry_delays: $("s_retry_delays").value, max_hours: parseFloat($("s_max_hours").value || "36"),

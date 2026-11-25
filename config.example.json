@@ -7,7 +7,7 @@
   "max_hours": 36,
   "context_limit": 200000,
   "compress_at": 170000,
-  "max_output_tokens": 16384,
+  "max_output_tokens": 8192,
   "temperature": null,
   "request_timeout": 900,
   "stream": true,
@@ -25,7 +25,7 @@
   "overload_delay": 5,
   "retry_jitter": 0.2,
   "spec_docs": true,
-  "spec_doc_tokens": 12000,
+  "spec_doc_tokens": 7000,
   "allowed_dirs": [
     "./workspaces"
   ],

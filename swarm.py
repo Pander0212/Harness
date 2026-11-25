@@ -86,8 +86,10 @@ UMGEBUNG
 - Dein Schreibbereich (scope): {scope}
   Ändere ausschließlich Dateien in diesem Bereich (write_file erzwingt das; halte dich auch
   bei bash daran). Andere Dateien darfst du lesen.
-- Werkzeuge: bash, read_file, write_file, list_dir, finish. Tool-Ausgaben werden auf {limit}
-  Zeichen gekürzt. Zeitbudget: {max_hours} Stunden.
+- Werkzeuge: bash, read_file, write_file (mit append=true zum Anhängen), list_dir, finish.
+  Tool-Ausgaben werden auf {limit} Zeichen gekürzt. Zeitbudget: {max_hours} Stunden.
+- Deine Antworten sind auf {max_out} Tokens begrenzt: große Dateien in Teilen schreiben
+  (write_file, dann write_file mit append=true, je höchstens ca. 300 Zeilen).
 
 ARBEITSWEISE
 1. Lies zuerst die relevanten Dateien (DESIGN.md, Schnittstellen, bestehender Code).
