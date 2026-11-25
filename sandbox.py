@@ -97,7 +97,8 @@ def _python_dirs():
     return [d for d in dirs if d and os.path.isdir(d)]
 
 
-def build_bwrap_cmd(command, workspace, writable_dirs, hidden=("/home", "/root"),
+def build_bwrap_cmd(command, workspace, writable_dirs,
+                    hidden=("/home", "/root", "/mnt", "/media", "/run/user"),
                     protect_files=(), network=True):
     cmd = ["bwrap", "--die-with-parent", "--new-session",
            "--ro-bind", "/", "/",
@@ -175,24 +176,121 @@ WIN_SHIM = ('python3() { python "$@"; }; pip3() { python -m pip "$@"; }; '
             'export -f python3 pip3 2>/dev/null; ')
 
 
+# --------------------------------------------------------------------------- Windows
+
+WIN_STATE = {"level": None, "message": "Windows-Sandbox noch nicht geprüft", "checks": []}
+_win_lock = threading.Lock()
+
+
+def init_windows_sandbox(cfg):
+    """Einmalig beim Start: Schutzmarkierungen setzen und Sandbox selbst testen."""
+    import winsandbox
+    with _win_lock:
+        if cfg["sandbox"] == "none":
+            WIN_STATE.update(level=None, message="Sandbox in config.json deaktiviert")
+            return WIN_STATE
+        if not find_windows_bash():
+            WIN_STATE.update(level=None, message=shell_status()[1])
+            return WIN_STATE
+        try:
+            winsandbox.protect(cfg.path)
+            winsandbox.protect(cfg.path_of("data_dir"))
+            winsandbox.grant_python_read()
+        except Exception as e:
+            WIN_STATE.update(level=None, message=f"Schutz von config.json/data fehlgeschlagen: {e}")
+            return WIN_STATE
+        ws_root = cfg.path_of("workspaces_dir")
+
+        def run_fn(level, command, workspace):
+            r = BashRunner(workspace, [workspace], mode="auto", require=True,
+                           output_limit=2000, win_level=level)
+            code, out, _ = r.run(command, timeout=60)
+            return code, out
+        res = winsandbox.selftest(run_fn, ws_root, cfg.base_dir, cfg.path,
+                                  os.path.expanduser("~"))
+        if res["level"]:
+            for d in cfg.allowed_dirs():
+                try:
+                    winsandbox.prepare_workspace(d, strict=res["level"] == "strict")
+                except Exception as e:
+                    res["message"] += f" (Hinweis: {d} nicht vorbereitet: {e})"
+        WIN_STATE.update(res)
+        return WIN_STATE
+
+
+def sandbox_status(cfg):
+    """(ok, meldung) – ist die bash-Sandbox auf diesem System aktiv?"""
+    if cfg["sandbox"] == "none":
+        return False, "Sandbox in config.json deaktiviert (\"sandbox\": \"none\")"
+    if IS_WINDOWS:
+        return bool(WIN_STATE["level"]), WIN_STATE["message"]
+    return bwrap_available()
+
+
+class _PopenProc:
+    """Popen mit derselben Schnittstelle wie winsandbox.SandboxedProcess."""
+
+    def __init__(self, argv, **kw):
+        self.p = subprocess.Popen(argv, **kw)
+        self.pid = self.p.pid
+
+    @property
+    def returncode(self):
+        return self.p.returncode
+
+    def wait(self, timeout=None):
+        return self.p.wait(timeout=timeout)
+
+    def kill(self):
+        _kill_tree(self.p)
+
+    def close(self):
+        if not IS_WINDOWS:
+            try:  # Hintergrundprozesse der Session aufräumen
+                os.killpg(self.p.pid, signal.SIGKILL)
+            except Exception:
+                pass
+
+
 class BashRunner:
     def __init__(self, workspace, writable_dirs, mode="auto", network=True,
-                 protect_files=(), output_limit=15000):
+                 protect_files=(), output_limit=15000, require=False, win_level=None,
+                 win_mem_mb=2048):
         self.workspace = os.path.realpath(workspace)
         self.writable_dirs = writable_dirs
         self.network = network
         self.protect_files = protect_files
         self.output_limit = output_limit
         self.use_bwrap = False
+        self.win_level = None
+        self.win_mem_mb = win_mem_mb
+        self.blocked = ""
         self.warning = ""
-        if mode in ("auto", "bwrap"):
+        if mode == "none":
+            self.warning = "WARNUNG: Sandbox deaktiviert, bash läuft NICHT abgeschottet."
+        elif IS_WINDOWS:
+            self.win_level = win_level or WIN_STATE["level"]
+            if not self.win_level:
+                msg = WIN_STATE["message"]
+                if require:
+                    self.blocked = msg
+                else:
+                    self.warning = f"WARNUNG: bash läuft NICHT abgeschottet ({msg})."
+            elif win_level is None:
+                import winsandbox
+                try:
+                    winsandbox.prepare_workspace(self.workspace,
+                                                 strict=self.win_level == "strict")
+                except Exception as e:
+                    self.blocked = f"Workspace konnte nicht vorbereitet werden: {e}"
+        else:
             ok, msg = bwrap_available()
             if ok:
                 self.use_bwrap = True
+            elif require:
+                self.blocked = msg
             else:
                 self.warning = f"WARNUNG: bash läuft NICHT abgeschottet ({msg})."
-        else:
-            self.warning = "WARNUNG: Sandbox deaktiviert, bash läuft NICHT abgeschottet."
 
     def _argv(self, command):
         if self.use_bwrap:
@@ -204,10 +302,33 @@ class BashRunner:
             return [bash, "-c", WIN_SHIM + command] if bash else command
         return ["/bin/bash", "-c", command]
 
+    def _spawn(self, argv, env, out):
+        if self.win_level:
+            import winsandbox
+            tmp = os.path.join(self.workspace, ".tmp")
+            os.makedirs(tmp, exist_ok=True)
+            env.update(TMP=tmp, TEMP=tmp, HOME=self.workspace)
+            return winsandbox.SandboxedProcess(argv, self.workspace, env, out,
+                                               strict=self.win_level == "strict",
+                                               mem_mb=self.win_mem_mb)
+        kwargs = dict(cwd=self.workspace, stdout=out, stderr=subprocess.STDOUT,
+                      stdin=subprocess.DEVNULL, env=env)
+        if IS_WINDOWS:
+            kwargs["shell"] = isinstance(argv, str)
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        else:
+            kwargs["start_new_session"] = True
+        return _PopenProc(argv, **kwargs)
+
     def run(self, command, timeout=600, stop_event=None):
         """Gibt (exit_code, ausgabe, timed_out) zurück."""
+        if self.blocked:
+            return (126, "FEHLER: Die Sandbox ist nicht verfügbar, bash ist aus Sicherheits"
+                    f"gründen deaktiviert. ({self.blocked})", False)
         os.makedirs(self.workspace, exist_ok=True)
         argv = self._argv(command)
+        if self.win_level and not isinstance(argv, list):
+            return (126, "FEHLER: Git Bash nicht gefunden – bash ist deaktiviert.", False)
         env = dict(os.environ)
         env.pop("HARNESS_CONFIG", None)
         for k in list(env):
@@ -220,14 +341,10 @@ class BashRunner:
             env["PYTHONIOENCODING"] = "utf-8"
             env["PYTHONUTF8"] = "1"
         with tempfile.TemporaryFile() as out:
-            kwargs = dict(cwd=self.workspace, stdout=out, stderr=subprocess.STDOUT,
-                          stdin=subprocess.DEVNULL, env=env)
-            if IS_WINDOWS:
-                kwargs["shell"] = isinstance(argv, str)
-                kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            else:
-                kwargs["start_new_session"] = True
-            proc = subprocess.Popen(argv, **kwargs)
+            try:
+                proc = self._spawn(argv, env, out)
+            except OSError as e:
+                return 126, f"FEHLER: Prozess konnte nicht gestartet werden: {e}", False
             deadline = time.monotonic() + timeout
             timed_out = stopped = False
             while True:
@@ -240,20 +357,15 @@ class BashRunner:
                     elif stop_event is not None and stop_event.is_set():
                         stopped = True
                     if timed_out or stopped:
-                        _kill_tree(proc)
+                        proc.kill()
                         try:
                             proc.wait(timeout=10)
                         except subprocess.TimeoutExpired:
                             pass
                         break
-            if not IS_WINDOWS and not timed_out and not stopped:
-                # Hintergrundprozesse der Session aufräumen
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except Exception:
-                    pass
+            proc.close()
             out.flush()
-            size = out.tell()
+            size = os.fstat(out.fileno()).st_size
             lim = self.output_limit * 4
             out.seek(0)
             if size > lim:

@@ -35,6 +35,8 @@ DEFAULTS = {
     "price_output_per_m": 2.25,
     "sandbox": "auto",          # auto | bwrap | none
     "sandbox_network": True,     # Netzwerk in der bwrap-Sandbox erlauben (pip etc.)
+    "require_sandbox": True,     # ohne funktionierende Sandbox keine Agenten starten
+    "win_job_memory_mb": 2048,   # Windows: Speicherlimit je bash-Befehl (0 = aus)
     "verify_on_finish": True,    # finish nur akzeptieren, wenn pytest grün ist
     "subagents_enabled": True,   # Tools subagent/swarm für Hauptagenten
     "max_subagents": 4,          # max. Pakete pro Schwarm
@@ -136,6 +138,12 @@ class Config:
                 os.chmod(self.path, 0o600)
             except OSError:
                 pass
+            if os.name == "nt":  # neue Datei -> No-Read-Up-Markierung erneut setzen
+                try:
+                    import winsandbox
+                    winsandbox.protect(self.path)
+                except Exception:
+                    pass
 
     def public(self):
         d = copy.deepcopy(self.data)

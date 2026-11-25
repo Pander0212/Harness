@@ -13,7 +13,7 @@ import time
 from agent import Agent, GiveUpError, AuthError, StoppedError
 from config import atomic_write_json, read_json
 from generator import generate_task, TOPIC_NAMES
-from sandbox import bwrap_available, shell_status
+from sandbox import init_windows_sandbox, sandbox_status, shell_status
 
 log = logging.getLogger("harness")
 
@@ -80,9 +80,9 @@ class Manager:
         self.cost_samples = collections.deque(maxlen=24 * 60 + 5)
         self.last_sample = 0
         self.base_totals = {k: 0 for k in STAT_KEYS}
-        ok, msg = bwrap_available() if cfg["sandbox"] != "none" else (False, "deaktiviert")
-        self.sandbox_ok = ok and cfg["sandbox"] != "none"
-        self.sandbox_msg = msg
+        if os.name == "nt":
+            init_windows_sandbox(cfg)
+        self.sandbox_ok, self.sandbox_msg = sandbox_status(cfg)
         sh_ok, sh_msg = shell_status()
         self.shell_ok, self.shell_msg = sh_ok, ("" if sh_ok else sh_msg)
         self._load()
@@ -319,6 +319,10 @@ class Manager:
         return self.client
 
     def config_problem(self):
+        if self.cfg["require_sandbox"] and self.cfg["sandbox"] != "none" \
+                and not self.sandbox_ok:
+            return ("Sandbox nicht verfügbar – aus Sicherheitsgründen werden keine Agenten "
+                    f"gestartet: {self.sandbox_msg}")
         if not self.cfg["api_key"]:
             return "Kein API-Key eingestellt"
         if not self.cfg["model"]:

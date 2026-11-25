@@ -214,6 +214,8 @@ class Agent:
         self.guard = PathGuard(cfg.allowed_dirs(), self.workspace,
                                deny=[cfg.path, cfg.path_of("data_dir")])
         self.bash = BashRunner(self.workspace, cfg.allowed_dirs(), mode=cfg["sandbox"],
+                               require=bool(cfg["require_sandbox"]),
+                               win_mem_mb=int(cfg["win_job_memory_mb"]),
                                network=cfg["sandbox_network"], protect_files=[cfg.path],
                                output_limit=cfg["tool_output_limit"])
         max_bytes = int(cfg["max_log_mb"] * 1024 * 1024)

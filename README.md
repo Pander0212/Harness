@@ -121,9 +121,12 @@ Harness in einem Home-Verzeichnis, `ProtectHome=true` entfernen.
   - `/home` und `/root` sind ausgeblendet (leeres tmpfs), außer den erlaubten Ordnern,
   - eigenes `/tmp`, eigener PID-Namensraum, `config.json` ist überblendet,
   - API-Keys werden aus der Umgebung entfernt.
+  - `no_new_privs` ist gesetzt: `sudo`/setuid-Programme können keine Rechte erlangen.
+  - `/mnt` und `/media` sind ausgeblendet (unter WSL also auch die Windows-Laufwerke).
   - Netzwerk ist erlaubt (z. B. für `pip`); mit `"sandbox_network": false` abschaltbar.
-- Ohne bwrap zeigt das UI eine deutliche **Warnung**: bash ist dann *nicht*
-  abgeschottet.
+- Ohne funktionierende Sandbox startet der Harness **keine Agenten** und zeigt den
+  Grund im UI (`require_sandbox`). Nur wer bewusst ohne Sandbox arbeiten will, setzt
+  `"sandbox": "none"` in `config.json`.
 
 bwrap installieren: `sudo apt install bubblewrap`. Test:
 `bwrap --ro-bind / / --dev /dev --proc /proc true && echo ok`. Schlägt das unter
@@ -171,11 +174,30 @@ installieren und den PATH-Haken setzen, oder unter *Einstellungen → Apps →
 App-Ausführungsaliase* die beiden Einträge „python.exe“ / „python3.exe“ (Microsoft
 Store) ausschalten.
 
-Hinweise: Unter Windows gibt es keine bwrap-Sandbox – am besten einen eigenen,
-eingeschränkten Windows-Benutzer verwenden oder WSL nutzen. Das Fenster von
-`start.bat` muss offen bleiben, solange die Agenten arbeiten (Energiesparmodus
-ausschalten). Für 8 GB RAM `max_parallel` auf 2–3 und `max_total_subagents` auf 2–3
-setzen.
+**Windows-Sandbox (eingebaut, ohne Zusatzsoftware):** Jeder Befehl der Agenten läuft
+mit einem eingeschränkten Windows-Token:
+
+- Integritätsstufe *Low*: Schreiben **nur** in den zugewiesenen Ordnern
+  (`allowed_dirs`, Standard `workspaces\`). Windows, Programme, Benutzerprofil,
+  Registry, `.venv` und der Harness selbst sind schreibgeschützt.
+- Keine Admin-Rechte: alle Privilegien entfernt, die Administratoren-Gruppe ist
+  deaktiviert. `config.json` (API-Key) und `data\` sind für die Agenten nicht einmal
+  lesbar.
+- Stufe *streng* (wenn das System sie unterstützt): zusätzlich kein Lesezugriff auf
+  dein Benutzerprofil (Dokumente, Desktop, Downloads, AppData).
+- Job-Objekt: Unterprozesse können nicht ausbrechen, Speicherlimit
+  (`win_job_memory_mb`), kein Zugriff auf Zwischenablage, kein Herunterfahren.
+
+Beim Start prüft der Harness das alles mit einem **Selbsttest** (Schreiben im Workspace
+ok, Schreiben außerhalb blockiert, `config.json` unlesbar, keine Admin-Rechte, ggf.
+Profil unlesbar). Im UI steht dann grün „Sandbox aktiv: …“. Schlägt der Test fehl,
+werden **keine Agenten gestartet** (`require_sandbox`), und das UI zeigt den Grund.
+Netzwerkzugriff bleibt erlaubt. Ordner auf anderen Laufwerken, die „Jeder“ lesen darf,
+bleiben lesbar. Bestätige nie eine UAC-Abfrage, die du nicht selbst ausgelöst hast.
+
+Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
+(Energiesparmodus ausschalten). Für 8 GB RAM `max_parallel` auf 2–3 und
+`max_total_subagents` auf 2–3 setzen.
 
 ## Konfiguration (`config.json`)
 
@@ -198,7 +220,9 @@ setzen.
 | `max_total_subagents` | 8 | max. gleichzeitig laufende Subagenten insgesamt |
 | `subagent_max_hours` | 6 | Zeitlimit je Subagent |
 | `swarm_ratio` | 0.25 | Anteil generierter Aufgaben im Schwarm-Modus |
-| `sandbox` | auto | `auto`, `bwrap` oder `none` |
+| `sandbox` | auto | `auto` (bwrap unter Linux, Token-Sandbox unter Windows) oder `none` |
+| `require_sandbox` | true | ohne funktionierende Sandbox keine Agenten starten |
+| `win_job_memory_mb` | 2048 | Windows: Speicherlimit je Befehl (0 = aus) |
 | `price_input_per_m` / `price_output_per_m` | 0.135 / 2.25 | $ pro 1 Mio. Tokens |
 | `max_log_mb` / `log_keep` | 50 / 5 | Rotation der Gesprächsprotokolle |
 | `ui_host`, `ui_port`, `ui_password` | 127.0.0.1, 8765, "" | Web-UI |
