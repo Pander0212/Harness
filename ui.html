@@ -189,6 +189,7 @@ function render() {
   if (S.auth_error) b += `<div class="banner err"><b>Authentifizierungsfehler – es werden keine Aufgaben gestartet.</b> Bitte API-Key/Modell prüfen und speichern.<br>${esc(S.auth_error)} <button onclick="clearAuth()">Sperre aufheben</button></div>`;
   if (S.config_problem) b += `<div class="banner err">${esc(S.config_problem)} – bitte unten in den Einstellungen eintragen.</div>`;
   if (!S.sandbox_ok) b += `<div class="banner warn"><b>Achtung:</b> bash-Befehle der Agenten laufen NICHT abgeschottet (${esc(S.sandbox_msg)}). Installiere bubblewrap (siehe README) oder nutze einen eigenen Linux-Benutzer.</div>`;
+  if (S.shell_msg) b += `<div class="banner err">${esc(S.shell_msg)}</div>`;
   if (S.throttle_note) b += `<div class="banner warn">${esc(S.throttle_note)}</div>`;
   if (S.gen_error) b += `<div class="banner warn">Generator: ${esc(S.gen_error)}</div>`;
   $("banners").innerHTML = b;

@@ -138,6 +138,43 @@ def _kill_tree(proc):
             pass
 
 
+def find_windows_bash():
+    """Git Bash suchen (nicht die WSL-bash.exe aus System32)."""
+    cands = []
+    for env in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        base = os.environ.get(env)
+        if base:
+            cands += [os.path.join(base, "Git", "bin", "bash.exe"),
+                      os.path.join(base, "Programs", "Git", "bin", "bash.exe")]
+    git = shutil.which("git")
+    if git:  # ...\Git\cmd\git.exe -> ...\Git\bin\bash.exe
+        cands.append(os.path.join(os.path.dirname(os.path.dirname(git)), "bin", "bash.exe"))
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    b = shutil.which("bash")
+    if b and "system32" not in b.lower():
+        return b
+    return None
+
+
+def shell_status():
+    """(ok, meldung) für die Shell der Agenten."""
+    if IS_WINDOWS:
+        b = find_windows_bash()
+        if not b:
+            return (False, "Windows: Git Bash nicht gefunden – bitte 'Git for Windows' "
+                           "installieren (git-scm.com), sonst funktionieren die "
+                           "bash-Befehle der Agenten nicht.")
+        return (True, f"Git Bash: {b}")
+    return (True, "/bin/bash")
+
+
+# python3/pip3 auf Windows auf das Python des Harness umleiten
+WIN_SHIM = ('python3() { python "$@"; }; pip3() { python -m pip "$@"; }; '
+            'export -f python3 pip3 2>/dev/null; ')
+
+
 class BashRunner:
     def __init__(self, workspace, writable_dirs, mode="auto", network=True,
                  protect_files=(), output_limit=15000):
@@ -163,8 +200,8 @@ class BashRunner:
                                    protect_files=self.protect_files,
                                    network=self.network)
         if IS_WINDOWS:
-            bash = shutil.which("bash")
-            return [bash, "-c", command] if bash else command
+            bash = find_windows_bash()
+            return [bash, "-c", WIN_SHIM + command] if bash else command
         return ["/bin/bash", "-c", command]
 
     def run(self, command, timeout=600, stop_event=None):
@@ -177,6 +214,11 @@ class BashRunner:
             if "API_KEY" in k.upper() or k.upper().startswith("OPENAI"):
                 env.pop(k)
         env["PYTHONDONTWRITEBYTECODE"] = "1"
+        if IS_WINDOWS:
+            # venv-Python (mit pytest) zuerst im PATH, UTF-8 für Ausgaben
+            env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+            env["PYTHONIOENCODING"] = "utf-8"
+            env["PYTHONUTF8"] = "1"
         with tempfile.TemporaryFile() as out:
             kwargs = dict(cwd=self.workspace, stdout=out, stderr=subprocess.STDOUT,
                           stdin=subprocess.DEVNULL, env=env)

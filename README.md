@@ -152,9 +152,30 @@ sollten nicht weltweit lesbar sein (`chmod 700 ~`).
 
 ### Windows / alter Laptop
 
-Unter Windows gibt es keine bwrap-Sandbox; bash-Befehle laufen über Git-Bash (falls
-installiert, sonst `cmd`). Am besten einen eigenen, eingeschränkten Windows-Benutzer
-verwenden oder (besser) Linux/WSL nutzen. Für 8 GB RAM `max_parallel` auf 2–3 setzen.
+**Einrichtung unter Windows 10/11 (einmalig):**
+
+1. **Python installieren:** https://www.python.org/downloads/windows/ → „Download
+   Python 3.x“. Im Installer **unten den Haken „Add python.exe to PATH“ setzen**,
+   dann „Install Now“.
+2. **Git for Windows installieren:** https://git-scm.com/download/win (alle
+   Standardoptionen übernehmen). Die Agenten führen ihre Befehle in Git Bash aus.
+3. **Harness herunterladen:** auf GitHub „Code → Download ZIP“, entpacken (z. B. nach
+   `C:\harness`) – oder `git clone`.
+4. **`start.bat` doppelklicken.** Beim ersten Start wird `.venv` angelegt und
+   `openai`/`pytest` installiert (dauert 1–2 Minuten). Danach öffnet sich das UI im
+   Browser (http://127.0.0.1:8765/). Dort API-Key und Modell eintragen.
+
+`start.sh` ist nur für Linux/Mac – unter Windows immer `start.bat` verwenden.
+Meldet `start.bat`, dass Python fehlt, obwohl es installiert ist: Python erneut
+installieren und den PATH-Haken setzen, oder unter *Einstellungen → Apps →
+App-Ausführungsaliase* die beiden Einträge „python.exe“ / „python3.exe“ (Microsoft
+Store) ausschalten.
+
+Hinweise: Unter Windows gibt es keine bwrap-Sandbox – am besten einen eigenen,
+eingeschränkten Windows-Benutzer verwenden oder WSL nutzen. Das Fenster von
+`start.bat` muss offen bleiben, solange die Agenten arbeiten (Energiesparmodus
+ausschalten). Für 8 GB RAM `max_parallel` auf 2–3 und `max_total_subagents` auf 2–3
+setzen.
 
 ## Konfiguration (`config.json`)
 

@@ -501,6 +501,9 @@ class Agent:
         note = ("bash läuft in einer bubblewrap-Sandbox: nur erlaubte Ordner sind "
                 "beschreibbar." if self.bash.use_bwrap else
                 "Bleibe strikt in deinem Workspace.")
+        if os.name == "nt":
+            note += (" System: Windows, Befehle laufen in Git Bash (python/python3 und "
+                     "pytest sind verfügbar; Pfade mit / schreiben).")
         if self.depth:
             scope = ", ".join(os.path.relpath(x, self.workspace) for x in self.scope) \
                 or "gesamter Workspace"

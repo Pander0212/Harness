@@ -13,7 +13,7 @@ import time
 from agent import Agent, GiveUpError, AuthError, StoppedError
 from config import atomic_write_json, read_json
 from generator import generate_task, TOPIC_NAMES
-from sandbox import bwrap_available
+from sandbox import bwrap_available, shell_status
 
 log = logging.getLogger("harness")
 
@@ -83,6 +83,8 @@ class Manager:
         ok, msg = bwrap_available() if cfg["sandbox"] != "none" else (False, "deaktiviert")
         self.sandbox_ok = ok and cfg["sandbox"] != "none"
         self.sandbox_msg = msg
+        sh_ok, sh_msg = shell_status()
+        self.shell_ok, self.shell_msg = sh_ok, ("" if sh_ok else sh_msg)
         self._load()
 
     # ------------------------------------------------------------- Persistenz
@@ -634,7 +636,7 @@ class Manager:
                 "paused": self.paused, "auth_error": self.auth_error,
                 "config_problem": self.config_problem(), "generating": self.generating,
                 "gen_error": self.gen_error, "sandbox_ok": self.sandbox_ok,
-                "sandbox_msg": self.sandbox_msg, "events": list(self.events)[-20:],
+                "sandbox_msg": self.sandbox_msg, "shell_msg": self.shell_msg, "events": list(self.events)[-20:],
                 "tasks": tasks, "config": self.cfg.public(),
             }
 

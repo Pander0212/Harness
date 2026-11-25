@@ -29,7 +29,17 @@ def setup_logging(cfg):
     root.addHandler(sh)
 
 
+def _utf8_console():
+    # Windows-Konsole: Sonderzeichen (→, ä) dürfen das Logging nicht stören
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main(argv=None):
+    _utf8_console()
     ap = argparse.ArgumentParser(description="Autonomer Coding-Agent-Harness")
     ap.add_argument("--config", default=config_mod.CONFIG_PATH)
     ap.add_argument("--host")
@@ -49,6 +59,14 @@ def main(argv=None):
     if not manager.sandbox_ok:
         log.warning("bash läuft NICHT abgeschottet: %s", manager.sandbox_msg)
     log.info("Web-UI: http://%s:%s/", ui.host, ui.port)
+    if not manager.shell_ok:
+        log.warning(manager.shell_msg)
+    if os.name == "nt" and not os.environ.get("HARNESS_NO_BROWSER"):
+        try:
+            import webbrowser
+            webbrowser.open(f"http://127.0.0.1:{ui.port}/")
+        except Exception:
+            pass
     ui.serve_background()
     manager.start_background()
 
