@@ -35,6 +35,7 @@ def cfg(tmp_path):
         "allowed_dirs": [str(tmp_path / "ws")], "sandbox": "none",
         "verify_on_finish": False, "endless_mode": False,
         "max_retries": 4, "retry_delays": [10, 20, 40, 60],
+        "retry_jitter": 0, "retry_overloaded_forever": False, "spec_docs": False,
     })
     c.save()
     return c

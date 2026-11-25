@@ -2,6 +2,7 @@
 import collections
 import json
 import os
+import random
 import re
 import threading
 import time
@@ -62,6 +63,44 @@ versucht?
 5. Welche Dateien sind für den nächsten Schritt relevant?
 Sei konkret (Dateinamen, Funktionsnamen, Fehlermeldungen)."""
 
+SPEC_SYSTEM = ("Du bist ein erfahrener Software-Architekt. Du schreibst präzise, "
+               "vollständige technische Dokumente, nach denen ein Entwicklerteam ohne "
+               "Rückfragen implementieren und testen kann.")
+
+SPEC_PROMPT = """Für das folgende Projekt soll vor Beginn der Implementierung eine \
+verbindliche technische Spezifikation entstehen. Sie wird als docs/SPEC.md abgelegt; der \
+Entwickler implementiert exakt danach.
+
+# Projekt: {title}
+
+{prompt}
+
+---
+Schreibe jetzt die vollständige SPEC.md (nur Markdown, keine Einleitung, kein Kommentar \
+davor oder danach). Umfang: mindestens {words} Wörter. Gliederung:
+1. Zweck, Umfang, Nicht-Ziele, Glossar
+2. Architektur: Pakete/Module mit Verantwortlichkeiten und Abhängigkeiten
+3. Öffentliche Schnittstellen: für jedes Modul alle Klassen/Funktionen mit exakten \
+Signaturen (Python-Typannotationen), Parametern, Rückgabewerten, Ausnahmen
+4. Datenformate und Algorithmen im Detail (Dateiformate, Kodierungen, Invarianten, \
+Komplexität)
+5. Genaues Verhalten inklusive Randfällen und Fehlerbehandlung (mit Fehlermeldungen)
+6. Ausführliche Beispiele (Eingabe → erwartete Ausgabe)
+7. Leistungsanforderungen und Abnahmekriterien"""
+
+TESTPLAN_PROMPT = """Schreibe jetzt passend zu dieser Spezifikation den verbindlichen \
+Testkatalog docs/TESTPLAN.md (nur Markdown, ohne Einleitung). Umfang: mindestens {words} \
+Wörter. Für jedes Modul nummerierte Testfälle (z. B. LEX-001) mit konkreten Eingaben und \
+exakt erwarteten Ausgaben bzw. Ausnahmen; Randfälle; Eigenschafts-/Zufallstests mit \
+festem Seed; Integrations- und End-to-End-Szenarien; Leistungstests. Gib zu jedem Testfall \
+an, in welcher pytest-Datei er umgesetzt werden soll."""
+
+DOCS_NOTE = ("Im Ordner docs/ liegen die verbindliche Spezifikation (docs/SPEC.md) und der "
+             "Testkatalog (docs/TESTPLAN.md). Lies beide vollständig mit read_file, bevor du "
+             "beginnst. Implementiere exakt nach SPEC.md, setze alle Testfälle aus "
+             "TESTPLAN.md als pytest-Tests um (IDs als Kommentar) und schlage bei jeder "
+             "Unklarheit erneut darin nach. Abweichungen nur mit Begründung in DESIGN.md.")
+
 NUDGE = ("Du hast keinen Tool-Call verwendet. Arbeite mit den Werkzeugen weiter "
          "(bash, read_file, write_file, list_dir). Wenn wirklich alles fertig ist und "
          "alle Tests grün sind, rufe `finish` auf.")
@@ -107,7 +146,7 @@ TOOLS = [
             "required": ["summary"]}}},
 ]
 
-SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", "node_modules", ".venv", "venv",
+SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", "node_modules", ".venv", "venv", ".tmp",
              ".mypy_cache"}
 
 # --------------------------------------------------------------------------- Fehler
@@ -139,6 +178,10 @@ class BadResponse(Exception):
     pass
 
 
+class OverloadedResponse(Exception):
+    """Modell/Server meldet Überlastung (auch als Antworttext)."""
+
+
 CONTEXT_WORDS = ("context", "token", "length", "too long", "too large", "maximum")
 
 
@@ -166,7 +209,25 @@ def classify_error(exc):
         return "context"
     if st == 400 and any(w in msg for w in CONTEXT_WORDS):
         return "context"
+    if is_overload(exc):
+        return "overloaded"
     return "retry"
+
+
+OVERLOAD_STATUS = (429, 502, 503, 504, 529)
+OVERLOAD_RE = re.compile(r"\bbusy\b|overload|over capacity|at capacity|try again|"
+                         r"temporarily unavailable|service unavailable|too many requests|"
+                         r"rate.?limit|server is overloaded", re.I)
+# strenger für normalen Antworttext (damit echte Antworten nicht verwechselt werden)
+OVERLOAD_TEXT_RE = re.compile(r"\bis (currently )?busy\b|overloaded|over capacity|"
+                              r"please try again (later|in a)|temporarily unavailable|"
+                              r"service unavailable|too many requests", re.I)
+
+
+def is_overload(exc):
+    if isinstance(exc, OverloadedResponse):
+        return True
+    return error_status(exc) in OVERLOAD_STATUS or bool(OVERLOAD_RE.search(str(exc)))
 
 
 def retry_after(exc):
@@ -251,7 +312,8 @@ class Agent:
         base = {"prompt_tokens": 0, "cached_tokens": 0, "completion_tokens": 0,
                 "calls": 0, "retries": 0, "compressions": 0, "cost_usd": 0.0,
                 "tool_calls": 0, "green_suites": 0, "active_seconds": 0.0,
-                "finish_rejections": 0, "runs": 0, "last_error": "", "subagents": 0}
+                "finish_rejections": 0, "runs": 0, "last_error": "", "subagents": 0,
+                "overload_waits": 0}
         old = read_json(os.path.join(self.data_dir, "stats.json"), {})
         if self.resume or old:
             base.update({k: v for k, v in old.items() if k in base})
@@ -367,6 +429,9 @@ class Agent:
                           "type": "function",
                           "function": {"name": _get(fn, "name") or "",
                                        "arguments": _get(fn, "arguments") or "{}"}})
+        if not calls and content.strip() and len(content) < 600 \
+                and OVERLOAD_TEXT_RE.search(content):
+            raise OverloadedResponse(f"Modell überlastet: {content.strip()[:200]}")
         if not content.strip() and not calls:
             raise BadResponse(f"Leere Antwort (finish_reason={fr})")
         return content, calls
@@ -377,6 +442,7 @@ class Agent:
         max_retries = int(self.cfg["max_retries"])
         delays = list(self.cfg["retry_delays"]) or [5]
         attempt = 0
+        waits = 0
         while True:
             self._check_stop()
             msgs = self.messages if purpose == "main" else messages
@@ -397,6 +463,23 @@ class Agent:
                 if kind == "auth":
                     self.log(f"AUTH-FEHLER: {text}")
                     raise AuthError(text)
+                if kind == "overloaded" and self.cfg.get("retry_overloaded_forever", True):
+                    # Überlastung: endlos weiter versuchen, zählt nicht gegen max_retries
+                    waits += 1
+                    self.stats["retries"] += 1
+                    self.stats["overload_waits"] = self.stats.get("overload_waits", 0) + 1
+                    self.status = f"überlastet – Versuch {waits}"
+                    if waits == 1 or waits % 12 == 0:
+                        self.log(f"Modell überlastet, versuche weiter (#{waits}): {text[:160]}")
+                    if waits % 12 == 0:
+                        self.save_stats()
+                    delay = float(self.cfg.get("overload_delay", 5))
+                    ra = retry_after(e)
+                    if ra is not None:
+                        delay = max(delay, min(ra, float(self.cfg.get("retry_after_max", 60))))
+                    self.sleep(self._jitter(delay))
+                    self._check_stop()
+                    continue
                 attempt += 1
                 if attempt > max_retries:
                     self.log(f"Aufgegeben nach {max_retries} Wiederholungen: {text}")
@@ -411,9 +494,9 @@ class Agent:
                     self.save_stats()
                     continue
                 if kind == "incomplete":
-                    partial = (e.partial or "").strip()
+                    partial = e.partial or ""
                     target = None if purpose == "main" else msgs
-                    if partial:
+                    if partial.strip():
                         self._add({"role": "assistant", "content": partial}, target)
                     self._add({"role": "user", "content": "continue"}, target)
                 self.save_stats()
@@ -421,8 +504,12 @@ class Agent:
                 ra = retry_after(e)
                 if ra is not None:  # Rate-Limit: Vorgabe des Anbieters respektieren
                     delay = max(delay, min(ra, float(self.cfg.get("retry_after_max", 60))))
-                self.sleep(delay)
+                self.sleep(self._jitter(delay))
                 self._check_stop()
+
+    def _jitter(self, delay):
+        j = float(self.cfg.get("retry_jitter", 0) or 0)
+        return delay * random.uniform(1 - j, 1 + j) if j else delay
 
     def _check_stop(self):
         if self.stop_event.is_set():
@@ -472,12 +559,52 @@ class Agent:
         text = "\n\n".join(parts)
         return truncate(text, max_chars)
 
+    def docs_exist(self):
+        d = os.path.join(self.workspace, "docs")
+        return all(os.path.exists(os.path.join(d, f)) for f in ("SPEC.md", "TESTPLAN.md"))
+
+    def prepare_docs(self):
+        """Erzeugt docs/SPEC.md und docs/TESTPLAN.md (lange Ausgaben werden per
+        'continue' fortgesetzt und zusammengesetzt)."""
+        d = os.path.join(self.workspace, "docs")
+        os.makedirs(d, exist_ok=True)
+        words = int(int(self.cfg.get("spec_doc_tokens", 12000)) * 0.6)
+        msgs = []
+        self._add({"role": "system", "content": SPEC_SYSTEM}, msgs)
+        self._add({"role": "user", "content": SPEC_PROMPT.format(
+            title=self.task["title"], prompt=self.task["prompt"], words=words)}, msgs)
+        for fname, follow in (("SPEC.md", None), ("TESTPLAN.md", TESTPLAN_PROMPT)):
+            path = os.path.join(d, fname)
+            if follow:
+                self._add({"role": "user", "content": follow.format(words=words)}, msgs)
+            if os.path.exists(path):
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    self._add({"role": "assistant", "content": f.read()}, msgs)
+                continue
+            self.status = f"erstellt {fname}"
+            self.log(f"Erzeuge docs/{fname} (Ziel ca. {words} Wörter)")
+            start = len(msgs)
+            text, _ = self.request("docs", msgs, with_tools=False)
+            parts = [m["content"] for m in msgs[start:] if m["role"] == "assistant"]
+            full = "".join(parts + [text]).strip()
+            del msgs[start:]
+            self._add({"role": "assistant", "content": full}, msgs)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(full + "\n")
+            self.log(f"docs/{fname} fertig ({len(full.split())} Wörter)")
+        self.status = "läuft"
+        self.save_stats()
+
     def _workspace_snapshot(self):
         prog = self._read_ws_file("PROGRESS.md", 8000)
         design = self._read_ws_file("DESIGN.md", 6000)
         s = "\n\n## Aktueller Inhalt von PROGRESS.md\n" + (prog or "(nicht vorhanden)")
         s += "\n\n## Aktueller Inhalt von DESIGN.md\n" + (design or "(nicht vorhanden)")
         s += "\n\n## Dateien im Workspace\n" + self.file_tree()
+        if self.docs_exist():
+            s += ("\n\nVerbindlich: docs/SPEC.md (Spezifikation) und docs/TESTPLAN.md "
+                  "(Testkatalog). Lies die für den nächsten Schritt relevanten Abschnitte "
+                  "erneut, bevor du weiterarbeitest.")
         return s
 
     def compress(self, reason=""):
@@ -543,7 +670,10 @@ class Agent:
                     {"role": "user", "content":
                      f"# Arbeitspaket: {self.task['title']}\n(Teil des Projekts "
                      f"\"{self.task.get('parent_title', '')}\")\n\n{self.task['prompt']}"
-                     + (f"\n\n## DESIGN.md des Projekts\n{design}" if design else "")}]
+                     + (f"\n\n## DESIGN.md des Projekts\n{design}" if design else "")
+                     + ("\n\nDie verbindliche Spezifikation steht in docs/SPEC.md, der "
+                        "Testkatalog in docs/TESTPLAN.md – lies die für dein Paket "
+                        "relevanten Abschnitte." if self.docs_exist() else "")}]
         return [{"role": "system", "content": self._system_prompt()},
                 {"role": "user", "content": f"# Aufgabe: {self.task['title']}\n\n"
                  f"{self.task['prompt']}\n\nArbeitsverzeichnis: {self.workspace}"}]
@@ -564,8 +694,9 @@ class Agent:
                        "offenen Stelle laut PROGRESS.md fort."})
             self.log("Setze anhand PROGRESS.md fort")
         else:
+            note = (DOCS_NOTE + " ") if self.docs_exist() else ""
             self._add({"role": "user", "content":
-                       "Beginne jetzt. Lege zuerst DESIGN.md und PROGRESS.md an."})
+                       f"{note}Beginne jetzt. Lege zuerst DESIGN.md und PROGRESS.md an."})
         self.context_tokens = self._estimate_tokens(self.messages)
 
     # ------------------------------------------------------------- Tools
@@ -723,6 +854,13 @@ class Agent:
         self.status = "läuft"
         outcome = {"outcome": "error", "message": "unbekannt"}
         try:
+            if (self.depth == 0 and self.cfg.get("spec_docs")
+                    and self.task.get("mode") != "generator" and not self.docs_exist()
+                    and not os.path.exists(os.path.join(self.workspace, "PROGRESS.md"))):
+                try:
+                    self.prepare_docs()
+                except GiveUpError as e:
+                    self.log(f"Spezifikation konnte nicht erzeugt werden, starte ohne: {e}")
             self._init_messages()
             self.log(f"Start: {self.task['title']}" +
                      (f" | {self.bash.warning}" if self.bash.warning else ""))

@@ -19,6 +19,11 @@
     5
   ],
   "retry_after_max": 60,
+  "retry_overloaded_forever": true,
+  "overload_delay": 5,
+  "retry_jitter": 0.2,
+  "spec_docs": true,
+  "spec_doc_tokens": 12000,
   "allowed_dirs": [
     "./workspaces"
   ],

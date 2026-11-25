@@ -35,7 +35,7 @@ th { color:var(--dim); font-weight:normal; font-size:12px; }
 td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .st { font-weight:600; white-space:nowrap; }
 .st-läuft { color:var(--acc); } .st-fertig { color:var(--ok); } .st-fehler { color:var(--err); }
-.st-schwach { color:var(--warn); } .st-retry { color:var(--warn); } .st-wartet, .st-gestoppt { color:var(--dim); }
+.st-schwach, .st-überlastet, .st-erstellt { color:var(--warn); } .st-retry { color:var(--warn); } .st-wartet, .st-gestoppt { color:var(--dim); }
 .small { color:var(--dim); font-size:12px; }
 .badge { display:inline-block; border:1px solid var(--acc); color:var(--acc); border-radius:3px;
          padding:0 5px; font-size:11px; margin-left:4px; }
@@ -90,6 +90,10 @@ details summary { cursor:pointer; color:var(--dim); }
       <label>Max. parallele Agenten (1–20)</label><input id="s_max_parallel" type="number" min="1" max="20">
       <label>Max. Retries pro Anfrage</label><input id="s_max_retries" type="number" min="0" max="100">
       <label>Wartezeit vor Retry (s, z. B. "5" oder "5,5,10,30")</label><input id="s_retry_delays">
+      <label>Bei Überlastung endlos weiter versuchen</label><input id="s_retry_overloaded_forever" type="checkbox">
+      <label>Wartezeit bei Überlastung (s)</label><input id="s_overload_delay" type="number" min="1" max="300">
+      <label>Vor dem Start SPEC.md + TESTPLAN.md erzeugen</label><input id="s_spec_docs" type="checkbox">
+      <label>Zielumfang je Dokument (Tokens)</label><input id="s_spec_doc_tokens" type="number" min="2000" max="30000" step="1000">
       <label>MAX_HOURS pro Aufgabe</label><input id="s_max_hours" type="number" min="0.1" step="0.5">
       <label>allowed_dirs (eine Zeile pro Ordner)</label><textarea id="s_allowed_dirs" rows="3"></textarea>
       <label>finish nur bei grünen Tests</label><input id="s_verify_on_finish" type="checkbox">
@@ -141,6 +145,8 @@ function fillSettings(force) {
   $("s_api_key").value = ""; $("s_api_key").placeholder = c.api_key ? c.api_key + " (unverändert lassen)" : "nicht gesetzt";
   $("s_base_url").value = c.base_url; $("s_model").value = c.model;
   $("s_max_parallel").value = c.max_parallel;
+  $("s_retry_overloaded_forever").checked = !!c.retry_overloaded_forever; $("s_overload_delay").value = c.overload_delay;
+  $("s_spec_docs").checked = !!c.spec_docs; $("s_spec_doc_tokens").value = c.spec_doc_tokens;
   $("s_max_retries").value = c.max_retries; $("s_retry_delays").value = (c.retry_delays || []).join(", "); $("s_max_hours").value = c.max_hours;
   $("s_allowed_dirs").value = (c.allowed_dirs || []).join("\n");
   $("s_verify_on_finish").checked = !!c.verify_on_finish; $("s_archive_finished").checked = !!c.archive_finished;
@@ -151,7 +157,10 @@ function fillSettings(force) {
 async function saveSettings() {
   const d = {base_url: $("s_base_url").value.trim(), model: $("s_model").value.trim(),
     max_parallel: parseInt($("s_max_parallel").value || "4"),
-    max_retries: parseInt($("s_max_retries").value || "10"), retry_delays: $("s_retry_delays").value, max_hours: parseFloat($("s_max_hours").value || "36"),
+    max_retries: parseInt($("s_max_retries").value || "10"),
+    retry_overloaded_forever: $("s_retry_overloaded_forever").checked,
+    overload_delay: parseFloat($("s_overload_delay").value || "5"),
+    spec_docs: $("s_spec_docs").checked, spec_doc_tokens: parseInt($("s_spec_doc_tokens").value || "12000"), retry_delays: $("s_retry_delays").value, max_hours: parseFloat($("s_max_hours").value || "36"),
     allowed_dirs: $("s_allowed_dirs").value, verify_on_finish: $("s_verify_on_finish").checked,
     archive_finished: $("s_archive_finished").checked, subagents_enabled: $("s_subagents_enabled").checked,
     max_subagents: parseInt($("s_max_subagents").value || "4"),
@@ -187,6 +196,7 @@ function render() {
     ["Subagenten aktiv", String(S.tasks.reduce((n, x) => n + (x.subagents_live || []).length, 0)) + " / " + S.config.max_total_subagents],
     ["Queue", S.queue_len + (S.generating ? " (generiere…)" : "")],
     ["API-Calls / Tool-Calls", fmtN(t.calls) + " / " + fmtN(t.tool_calls)],
+    ["Überlastung: Wiederholungen", fmtN(t.overload_waits || 0)],
   ].map(([k, v]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
   $("btnEndless").textContent = "Endlosmodus: " + (S.endless_mode ? "an" : "aus");
   $("btnEndless").className = S.endless_mode ? "on" : "";

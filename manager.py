@@ -18,7 +18,8 @@ from sandbox import init_windows_sandbox, sandbox_status, shell_status
 log = logging.getLogger("harness")
 
 STAT_KEYS = ("prompt_tokens", "cached_tokens", "completion_tokens", "calls", "retries",
-             "compressions", "cost_usd", "tool_calls", "green_suites", "subagents")
+             "compressions", "cost_usd", "tool_calls", "green_suites", "subagents",
+             "overload_waits")
 
 BUILTIN_TOPICS = {"sql": "database", "interpreter": "compiler", "git": "devtools",
                   "http": "network", "riscv": "emulation"}

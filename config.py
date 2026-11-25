@@ -26,6 +26,11 @@ DEFAULTS = {
     "max_retries": 10,
     "retry_delays": [5],         # Wartezeit vor Retry 1, 2, ...; letzter Wert gilt weiter
     "retry_after_max": 60,       # 429 mit Retry-After: höchstens so lange warten
+    "retry_overloaded_forever": True,  # "busy/overloaded": endlos weiter versuchen
+    "overload_delay": 5,         # Sekunden zwischen Versuchen bei Überlastung
+    "retry_jitter": 0.2,         # ±20 % Zufallsstreuung der Wartezeit
+    "spec_docs": True,           # vor dem Start SPEC.md + TESTPLAN.md erzeugen
+    "spec_doc_tokens": 12000,    # Zielumfang je Dokument
     "allowed_dirs": ["./workspaces"],
     "workspaces_dir": "./workspaces",
     "data_dir": "./data",
@@ -62,7 +67,8 @@ EDITABLE = {
     "allowed_dirs": list, "max_hours": float, "endless_mode": bool,
     "archive_finished": bool, "verify_on_finish": bool, "subagents_enabled": bool,
     "max_subagents": int, "max_total_subagents": int, "swarm_ratio": float,
-    "max_retries": int, "retry_delays": list,
+    "max_retries": int, "retry_delays": list, "retry_overloaded_forever": bool,
+    "overload_delay": float, "spec_docs": bool, "spec_doc_tokens": int,
 }
 
 _lock = threading.Lock()
@@ -126,6 +132,10 @@ class Config:
                 v = bool(v)
             else:
                 v = typ(v)
+            if k == "overload_delay":
+                v = max(1.0, min(float(v), 300.0))
+            if k == "spec_doc_tokens":
+                v = max(2000, min(int(v), 30000))
             if k == "max_retries":
                 v = max(0, min(int(v), 100))
             if k in ("max_subagents", "max_total_subagents"):

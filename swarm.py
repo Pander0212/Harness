@@ -12,7 +12,8 @@ import threading
 import time
 
 STAT_MERGE_KEYS = ("prompt_tokens", "cached_tokens", "completion_tokens", "calls", "retries",
-                   "compressions", "cost_usd", "tool_calls", "green_suites", "subagents")
+                   "compressions", "cost_usd", "tool_calls", "green_suites", "subagents",
+                   "overload_waits")
 
 _SCOPE_DESC = ("Liste von Pfaden (relativ zum Workspace), in die dieser Subagent schreiben "
                "darf, z. B. [\"src/parser/\", \"tests/test_parser.py\"]. Leer = ganzer Workspace.")

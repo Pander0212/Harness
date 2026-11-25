@@ -213,6 +213,10 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `max_retries` | 10 | Wiederholungen pro Anfrage (im UI 0–100) |
 | `retry_delays` | [5] | Wartezeit(en) in s vor Wiederholung 1, 2, …; der letzte Wert gilt weiter |
 | `retry_after_max` | 60 | bei 429 mit `Retry-After`: höchstens so lange warten |
+| `retry_overloaded_forever` | true | bei Überlastung („busy“, 429/502/503/504/529) endlos weiter versuchen |
+| `overload_delay` | 5 | Sekunden zwischen Versuchen bei Überlastung (±`retry_jitter`) |
+| `spec_docs` | true | vor dem Start `docs/SPEC.md` und `docs/TESTPLAN.md` erzeugen |
+| `spec_doc_tokens` | 12000 | Zielumfang je Dokument |
 | `allowed_dirs` | ["./workspaces"] | beschreibbare/lesbare Ordner |
 | `endless_mode` | true | bei leerer Queue neue Aufgaben generieren |
 | `verify_on_finish` | true | `finish` nur akzeptieren, wenn `pytest` grün ist |
@@ -246,6 +250,17 @@ Verlauf selbst zusammen. Danach beginnt ein neuer Verlauf aus Systemprompt, Aufg
 Zusammenfassung sowie dem aktuellen Inhalt von `PROGRESS.md`, `DESIGN.md` und der
 Dateiliste; der Agent liest die relevanten Dateien anschließend neu ein.
 
+### Spezifikation und Testkatalog vor dem Start
+Bevor ein Hauptagent mit einer neuen Aufgabe beginnt, schreibt das Modell eine
+ausführliche, verbindliche Spezifikation (`docs/SPEC.md`: Architektur, exakte
+Schnittstellen, Datenformate, Randfälle, Beispiele) und einen Testkatalog
+(`docs/TESTPLAN.md`: nummerierte Testfälle mit konkreten Erwartungen), je etwa
+`spec_doc_tokens` Tokens. Der Agent liest beide vollständig, implementiert danach und
+setzt die Testfälle als pytest-Tests um; nach jeder Komprimierung wird er erneut darauf
+verwiesen. Subagenten lesen die für ihr Paket relevanten Abschnitte. Lange Dokumente
+werden über `continue` fortgesetzt und zusammengesetzt. Schlägt die Erzeugung fehl,
+startet die Aufgabe ohne Dokumente.
+
 ### Subagenten und Schwarm
 Hauptagenten haben zwei zusätzliche Werkzeuge:
 
@@ -278,6 +293,10 @@ Schwarm-Modus gestartet.
   bis zu 10 Wiederholungen im Abstand von 5 s (beides im UI einstellbar). Schickt
   der Anbieter bei 429 einen `Retry-After`-Header, wird so lange gewartet (max. 60 s). War eine Antwort
   abgeschnitten, wird der Teil übernommen und `continue` angehängt.
+- **Überlastung** („… is busy, please try again“, „overloaded“, HTTP 429/502/503/504/529
+  – auch wenn die Meldung als normaler Antworttext kommt): Es wird **endlos** alle 5 s
+  (mit ±20 % Streuung) weiter versucht, ohne dass die Aufgabe abbricht. Diese Versuche
+  zählen nicht gegen `max_retries`; das UI zeigt „überlastet – Versuch n“.
 - Kontext zu lang (400/413 mit „context/token/length“): erst komprimieren, dann
   erneut senden.
 - 401/403: sofortiger Abbruch, rotes Banner im UI, **keine** weiteren Starts, bis die
