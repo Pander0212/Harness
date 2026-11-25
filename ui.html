@@ -36,6 +36,10 @@ td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap
 .st-läuft { color:var(--acc); } .st-fertig { color:var(--ok); } .st-fehler { color:var(--err); }
 .st-schwach { color:var(--warn); } .st-retry { color:var(--warn); } .st-wartet, .st-gestoppt { color:var(--dim); }
 .small { color:var(--dim); font-size:12px; }
+.badge { display:inline-block; border:1px solid var(--acc); color:var(--acc); border-radius:3px;
+         padding:0 5px; font-size:11px; margin-left:4px; }
+tr.sub td { background:#181b20; font-size:12px; border-bottom:1px dashed var(--line); }
+tr.sub td:first-child { padding-left:22px; }
 .err { color:var(--err); }
 pre.log { background:#0f1114; border:1px solid var(--line); padding:6px; margin:6px 0 0;
           max-height:340px; overflow:auto; font-size:12px; white-space:pre-wrap; word-break:break-word; }
@@ -69,6 +73,8 @@ details summary { cursor:pointer; color:var(--dim); }
   <h2>Aufgabe hinzufügen</h2>
   <div class="box">
     <div class="row"><input id="newTitle" placeholder="Titel" style="flex:1">
+      <select id="newMode"><option value="single">Einzelagent</option>
+        <option value="swarm">Schwarm (Koordinator + Subagenten)</option></select>
       <label><input type="checkbox" id="newFront"> vorne einreihen</label></div>
     <textarea id="newPrompt" rows="8" placeholder="Ausführliche Aufgabenbeschreibung (Markdown)…"></textarea>
     <div class="row"><button onclick="addTask()">Hinzufügen</button></div>
@@ -85,6 +91,10 @@ details summary { cursor:pointer; color:var(--dim); }
       <label>allowed_dirs (eine Zeile pro Ordner)</label><textarea id="s_allowed_dirs" rows="3"></textarea>
       <label>finish nur bei grünen Tests</label><input id="s_verify_on_finish" type="checkbox">
       <label>Fertige Workspaces archivieren</label><input id="s_archive_finished" type="checkbox">
+      <label>Subagenten / Schwarm erlauben</label><input id="s_subagents_enabled" type="checkbox">
+      <label>Max. Pakete pro Schwarm</label><input id="s_max_subagents" type="number" min="1" max="20">
+      <label>Max. Subagenten gesamt gleichzeitig</label><input id="s_max_total_subagents" type="number" min="1" max="20">
+      <label>Anteil generierter Aufgaben als Schwarm (0–1)</label><input id="s_swarm_ratio" type="number" min="0" max="1" step="0.05">
     </div>
     <div class="row"><button onclick="saveSettings()">Speichern</button>
       <button onclick="fillSettings(true)">Neu laden</button><span id="saveMsg" class="small"></span></div>
@@ -118,7 +128,8 @@ async function togglePause() { await api("/api/pause", {on: !S.paused}); refresh
 async function clearAuth() { await api("/api/clear_auth", {}); refresh(); }
 async function addTask() {
   const prompt = $("newPrompt").value.trim(); if (!prompt) return alert("Text fehlt");
-  await api("/api/task/add", {title: $("newTitle").value, prompt, front: $("newFront").checked});
+  await api("/api/task/add", {title: $("newTitle").value, prompt, front: $("newFront").checked,
+    mode: $("newMode").value});
   $("newPrompt").value = ""; $("newTitle").value = ""; refresh();
 }
 function fillSettings(force) {
@@ -129,13 +140,18 @@ function fillSettings(force) {
   $("s_max_parallel").value = c.max_parallel; $("s_max_hours").value = c.max_hours;
   $("s_allowed_dirs").value = (c.allowed_dirs || []).join("\n");
   $("s_verify_on_finish").checked = !!c.verify_on_finish; $("s_archive_finished").checked = !!c.archive_finished;
+  $("s_subagents_enabled").checked = !!c.subagents_enabled; $("s_max_subagents").value = c.max_subagents;
+  $("s_max_total_subagents").value = c.max_total_subagents; $("s_swarm_ratio").value = c.swarm_ratio;
   settingsFilled = true;
 }
 async function saveSettings() {
   const d = {base_url: $("s_base_url").value.trim(), model: $("s_model").value.trim(),
     max_parallel: parseInt($("s_max_parallel").value || "4"), max_hours: parseFloat($("s_max_hours").value || "36"),
     allowed_dirs: $("s_allowed_dirs").value, verify_on_finish: $("s_verify_on_finish").checked,
-    archive_finished: $("s_archive_finished").checked};
+    archive_finished: $("s_archive_finished").checked, subagents_enabled: $("s_subagents_enabled").checked,
+    max_subagents: parseInt($("s_max_subagents").value || "4"),
+    max_total_subagents: parseInt($("s_max_total_subagents").value || "8"),
+    swarm_ratio: parseFloat($("s_swarm_ratio").value || "0")};
   if ($("s_api_key").value.trim()) d.api_key = $("s_api_key").value.trim();
   const r = await api("/api/settings", d);
   $("saveMsg").textContent = r.ok ? "Gespeichert: " + (r.changed.join(", ") || "keine Änderung") : "";
@@ -161,6 +177,7 @@ function render() {
     ["$ / Stunde (Ø 1 h)", fmtUsd(S.rate_per_hour)],
     ["Hochrechnung 24 h", fmtUsd(S.projection_24h)],
     ["Parallelität", `${S.running} laufen · Limit ${S.effective_parallel}/${S.max_parallel}`],
+    ["Subagenten aktiv", String(S.tasks.reduce((n, x) => n + (x.subagents_live || []).length, 0)) + " / " + S.config.max_total_subagents],
     ["Queue", S.queue_len + (S.generating ? " (generiere…)" : "")],
     ["API-Calls / Tool-Calls", fmtN(t.calls) + " / " + fmtN(t.tool_calls)],
   ].map(([k, v]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
@@ -186,11 +203,14 @@ function render() {
     if (canResume) actions += btn("resume", "Fortsetzen");
     actions += btn("restart", "Neustart");
     if (q) actions += `<button onclick="act('move','${id}',{dir:'up'})">▲</button><button onclick="act('move','${id}',{dir:'down'})">▼</button><button onclick="act('move','${id}',{dir:'top'})">⤒</button>`;
-    if (!x.running) actions += btn("delete", "Löschen");
+    if (!x.running) actions += btn("delete", "Löschen") +
+      `<button onclick="act('mode','${id}',{mode:'${x.mode === "swarm" ? "single" : "swarm"}'})">${x.mode === "swarm" ? "→ Einzel" : "→ Schwarm"}</button>`;
     actions += `<button onclick="toggleLog('${id}')">Log</button><button onclick="showPrompt('${id}')">Text</button>`;
     let status = x.status + (q ? ` (#${q})` : "");
     if (x.weak && x.status !== "schwach") status += " · schwach";
-    const row = `<tr><td><b>${esc(x.title)}</b><div class="small">${esc(x.topic)} · ${esc(x.source)}${x.note ? " · " + esc(x.note) : ""}</div>
+    const badge = x.mode === "swarm" ? `<span class="badge">Schwarm</span>` : "";
+    const subInfo = s.subagents ? ` · ${s.subagents} Subagenten` : "";
+    const row = `<tr><td><b>${esc(x.title)}</b>${badge}<div class="small">${esc(x.topic)} · ${esc(x.source)}${subInfo}${x.note ? " · " + esc(x.note) : ""}</div>
       ${x.last_error ? `<div class="small err">${esc(x.last_error)}</div>` : ""}</td>
       <td class="${statusClass(x.status)}">${esc(status)}</td>
       <td class="num">${x.running ? fmtN(s.context_tokens) : "–"}</td>
@@ -200,7 +220,12 @@ function render() {
       <td class="num">${fmtUsd(s.cost_usd)}</td><td class="num">${fmtDur(s.active_seconds)}</td>
       <td class="btns">${actions}</td></tr>`;
     const log = openLogs.has(x.id) ? `<tr><td colspan="11"><pre class="log">${esc((x.logs||[]).join("\n") || "(kein Log)")}</pre></td></tr>` : "";
-    return row + log;
+    const subs = (x.subagents_live || []).map(c => `<tr class="sub"><td>↳ <b>${esc(c.name)}</b>
+      <div class="small">scope: ${esc((c.scope || []).join(", ") || "Workspace")}</div>
+      <div class="small">${esc(c.last)}</div></td><td class="${statusClass(c.status)}">${esc(c.status)}</td>
+      <td class="num">${fmtN(c.context_tokens)}</td><td class="num">${c.calls}</td><td class="num">${c.tool_calls}</td>
+      <td colspan="3"></td><td class="num">${fmtUsd(c.cost_usd)}</td><td colspan="2"></td></tr>`).join("");
+    return row + subs + log;
   }).join("") || `<tr><td colspan="11" class="small">Keine Aufgaben.</td></tr>`;
   $("events").textContent = (S.events || []).slice().reverse().join("\n");
 }

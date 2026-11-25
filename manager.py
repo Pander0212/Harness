@@ -18,7 +18,7 @@ from sandbox import bwrap_available
 log = logging.getLogger("harness")
 
 STAT_KEYS = ("prompt_tokens", "cached_tokens", "completion_tokens", "calls", "retries",
-             "compressions", "cost_usd", "tool_calls", "green_suites")
+             "compressions", "cost_usd", "tool_calls", "green_suites", "subagents")
 
 BUILTIN_TOPICS = {"sql": "database", "interpreter": "compiler", "git": "devtools",
                   "http": "network", "riscv": "emulation"}
@@ -71,6 +71,7 @@ class Manager:
         self.gen_error = ""
         # Drosselung
         self.effective_parallel = int(cfg["max_parallel"])
+        self.sub_semaphore = threading.BoundedSemaphore(max(1, int(cfg["max_total_subagents"])))
         self.error_times = []
         self.last_error_time = None
         self.throttle_note = ""
@@ -151,7 +152,7 @@ class Manager:
     def task_dir(self, tid):
         return os.path.join(self.data_dir, "tasks", tid)
 
-    def add_task(self, title, prompt, topic="", source="manuell", front=False):
+    def add_task(self, title, prompt, topic="", source="manuell", front=False, mode="single"):
         with self.lock:
             title = (title or "").strip() or "Aufgabe"
             tid = self._new_id(title)
@@ -162,13 +163,15 @@ class Manager:
             self.tasks[tid] = {"id": tid, "title": title, "topic": topic, "source": source,
                                "status": "wartet", "weak": False, "resume": False,
                                "created": self.clock(), "started": None, "finished": None,
-                               "last_error": "", "note": "", "stats": {}}
+                               "last_error": "", "note": "", "stats": {},
+                               "mode": "swarm" if mode == "swarm" else "single"}
             if front:
                 self.queue.insert(0, tid)
             else:
                 self.queue.append(tid)
             self.save()
-            self.event(f"Aufgabe hinzugefügt: {title} ({source})")
+            self.event(f"Aufgabe hinzugefügt: {title} ({source}"
+                       f"{', Schwarm' if mode == 'swarm' else ''})")
             return tid
 
     def get_prompt(self, tid):
@@ -294,6 +297,9 @@ class Manager:
             if self.auth_error:
                 self.event("Einstellungen gespeichert – Auth-Sperre aufgehoben")
             self.auth_error = ""
+            if "max_total_subagents" in keys:
+                self.sub_semaphore = threading.BoundedSemaphore(
+                    max(1, int(self.cfg["max_total_subagents"])))
             if "max_parallel" in keys:
                 self.effective_parallel = int(self.cfg["max_parallel"])
                 self.throttle_note = ""
@@ -367,9 +373,11 @@ class Manager:
             self.auth_error = f"API-Client konnte nicht erstellt werden: {e}"
             self.queue.insert(0, tid)
             return
-        task = {"id": tid, "title": t["title"], "prompt": self.get_prompt(tid)}
+        task = {"id": tid, "title": t["title"], "prompt": self.get_prompt(tid),
+                "mode": t.get("mode", "single")}
         ag = Agent(task, self.cfg, client, os.path.join(self.ws_dir, tid), self.task_dir(tid),
-                   resume=bool(t.get("resume")), sleep=self.agent_sleep, clock=self.clock)
+                   resume=bool(t.get("resume")), sleep=self.agent_sleep, clock=self.clock,
+                   sub_semaphore=self.sub_semaphore)
         self.agents[tid] = ag
         t["status"] = "läuft"
         t["started"] = t.get("started") or self.clock()
@@ -495,7 +503,8 @@ class Manager:
         hist = self._all_history()
         example = self._example_task()
         gdir = os.path.join(self.data_dir, "generator")
-        task = {"id": "_generator", "title": "Aufgaben-Generator", "prompt": ""}
+        task = {"id": "_generator", "title": "Aufgaben-Generator", "prompt": "",
+                "mode": "generator"}
         ag = Agent(task, self.cfg, self._get_client(), os.path.join(gdir, "ws"), gdir,
                    resume=True, sleep=self.agent_sleep, clock=self.clock)
         self.gen_agent = ag
@@ -523,8 +532,10 @@ class Manager:
                 self.gen_thread = None
                 if result:
                     self.gen_error = ""
+                    swarm = self.cfg["subagents_enabled"] and \
+                        self.rng.random() < float(self.cfg["swarm_ratio"])
                     self.add_task(result["title"], result["prompt"], topic=result["topic"],
-                                  source="generiert")
+                                  source="generiert", mode="swarm" if swarm else "single")
                 else:
                     self.gen_error = err
                     self.next_gen_time = self.clock() + 300
@@ -544,7 +555,8 @@ class Manager:
     def _task_stats(self, tid):
         if tid in self.agents:
             ag = self.agents[tid]
-            s = {k: ag.stats.get(k, 0) for k in STAT_KEYS}
+            live = ag.live_stats()
+            s = {k: live.get(k, 0) for k in STAT_KEYS}
             s["active_seconds"] = ag.active_seconds()
             s["context_tokens"] = ag.context_tokens
             return s
@@ -602,6 +614,8 @@ class Manager:
                         t.get("topic"), t.get("topic", "")), "source": t.get("source"),
                     "status": ag.status if ag else t["status"],
                     "running": ag is not None, "weak": t.get("weak", False),
+                    "mode": t.get("mode", "single"),
+                    "subagents_live": ag.subs.info() if ag else [],
                     "queue_pos": self.queue.index(tid) + 1 if tid in self.queue else None,
                     "stats": st, "last_error": (ag.stats.get("last_error") if ag else
                                                 t.get("last_error")) or "",

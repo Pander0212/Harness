@@ -36,6 +36,11 @@ DEFAULTS = {
     "sandbox": "auto",          # auto | bwrap | none
     "sandbox_network": True,     # Netzwerk in der bwrap-Sandbox erlauben (pip etc.)
     "verify_on_finish": True,    # finish nur akzeptieren, wenn pytest grün ist
+    "subagents_enabled": True,   # Tools subagent/swarm für Hauptagenten
+    "max_subagents": 4,          # max. Pakete pro Schwarm
+    "max_total_subagents": 8,    # max. gleichzeitig laufende Subagenten insgesamt
+    "subagent_max_hours": 6,
+    "swarm_ratio": 0.25,         # Anteil generierter Aufgaben im Schwarm-Modus
     "max_finish_rejections": 5,
     "weak_min_tool_calls": 20,
     "throttle_errors": 3,
@@ -52,7 +57,8 @@ DEFAULTS = {
 EDITABLE = {
     "api_key": str, "base_url": str, "model": str, "max_parallel": int,
     "allowed_dirs": list, "max_hours": float, "endless_mode": bool,
-    "archive_finished": bool, "verify_on_finish": bool,
+    "archive_finished": bool, "verify_on_finish": bool, "subagents_enabled": bool,
+    "max_subagents": int, "max_total_subagents": int, "swarm_ratio": float,
 }
 
 _lock = threading.Lock()
@@ -109,6 +115,10 @@ class Config:
                 v = bool(v)
             else:
                 v = typ(v)
+            if k in ("max_subagents", "max_total_subagents"):
+                v = max(1, min(int(v), 20))
+            if k == "swarm_ratio":
+                v = max(0.0, min(float(v), 1.0))
             if k == "max_parallel":
                 v = max(1, min(int(v), int(self.data["max_parallel_limit"])))
             if self.data.get(k) != v:

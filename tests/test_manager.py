@@ -277,3 +277,61 @@ def test_missing_config_blocks_start(cfg, tmp_path):
     m.add_task("A", "x")
     m.tick()
     assert not m.agents and "API-Key" in m.snapshot()["config_problem"]
+
+
+def test_generated_task_swarm_mode(cfg, tmp_path):
+    cfg.data["endless_mode"] = True
+    cfg.data["swarm_ratio"] = 1.0
+    started = []
+
+    def answer(kwargs):
+        if "tools" not in kwargs:
+            return resp(content=GEN_TEXT)
+        started.append(kwargs["messages"][0]["content"])
+        return finish()
+    m = make(cfg, tmp_path, FakeClient(default=answer))
+    m.tick()
+    end = time.time() + 10
+    while time.time() < end and not started:
+        time.sleep(0.02)
+    m.cfg.data["endless_mode"] = False
+    wait_idle(m)
+    t = next(iter(m.tasks.values()))
+    assert t["mode"] == "swarm"
+    assert "SCHWARM-KOORDINATOR" in started[0]
+
+
+def test_snapshot_shows_live_subagents(cfg, tmp_path):
+    import threading as th
+    go = th.Event()
+    instr = "Implementiere das Modul vollständig inklusive Tests."
+
+    def brain(kw):
+        sysmsg = kw["messages"][0]["content"]
+        n = sum(1 for x in kw["messages"] if x["role"] == "tool")
+        if "Subagent in einem autonomen" in sysmsg:
+            if n == 0:
+                return tool("bash", command="true")
+            go.wait(5)
+            return finish()
+        if n == 0:
+            return resp(calls=[("subagent", {"name": "helfer", "instructions": instr})])
+        return finish()
+    m = make(cfg, tmp_path, FakeClient(default=brain))
+    a = m.add_task("Mit Helfer", "x", mode="swarm")
+    m.tick()
+    end = time.time() + 5
+    snap = None
+    while time.time() < end:
+        snap = m.snapshot()
+        live = snap["tasks"][0]["subagents_live"]
+        if live and live[0]["calls"] >= 1:
+            break
+        time.sleep(0.02)
+    task = snap["tasks"][0]
+    assert task["mode"] == "swarm"
+    assert task["subagents_live"][0]["name"] == "helfer"
+    assert task["stats"]["calls"] >= 2   # Hauptagent + laufender Subagent
+    go.set()
+    wait_idle(m)
+    assert m.tasks[a]["stats"]["subagents"] == 1

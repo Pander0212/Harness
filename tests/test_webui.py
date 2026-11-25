@@ -110,3 +110,15 @@ def test_password_protection(cfg, tmp_path):
         assert code == 200
     finally:
         ui.shutdown()
+
+
+def test_add_with_mode_and_toggle(server):
+    m, ui, base = server
+    a = post(base + "/api/task/add", {"title": "S", "prompt": "x", "mode": "swarm"})["id"]
+    assert m.tasks[a]["mode"] == "swarm"
+    post(base + "/api/task/mode", {"id": a, "mode": "single"})
+    assert m.tasks[a]["mode"] == "single"
+    r = post(base + "/api/settings", {"max_subagents": 99, "swarm_ratio": 2,
+                                      "subagents_enabled": False})
+    assert m.cfg["max_subagents"] == 20 and m.cfg["swarm_ratio"] == 1.0
+    assert m.cfg["subagents_enabled"] is False

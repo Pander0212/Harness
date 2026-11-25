@@ -11,6 +11,8 @@ import uuid
 from config import atomic_write_json, read_json
 from logutil import AppendLog
 from sandbox import BashRunner, PathError, PathGuard, truncate
+from swarm import (COORDINATOR_SECTION, SUB_SYSTEM_PROMPT, SUBAGENT_PROMPT_SECTION,
+                   SUBAGENT_TOOLS, SubagentManager)
 
 # --------------------------------------------------------------------------- Prompts
 
@@ -187,7 +189,8 @@ def _get(obj, name, default=None):
 
 class Agent:
     def __init__(self, task, cfg, client, workspace, data_dir, resume=False,
-                 sleep=None, clock=time.time, on_update=None):
+                 sleep=None, clock=time.time, on_update=None, depth=0, scope=None,
+                 stop_event=None, sub_semaphore=None):
         self.task = task                      # dict: id, title, prompt
         self.cfg = cfg
         self.client = client
@@ -195,7 +198,14 @@ class Agent:
         self.data_dir = data_dir
         self.resume = resume
         self.clock = clock
-        self.stop_event = threading.Event()
+        self.stop_event = stop_event or threading.Event()
+        self.depth = depth                    # 0 = Hauptagent, 1 = Subagent
+        self.scope = scope or []              # Schreibbereich eines Subagenten
+        self.sub_semaphore = sub_semaphore or threading.BoundedSemaphore(
+            max(1, int(cfg["max_total_subagents"])))
+        self.on_log = None
+        self.last_text = ""
+        self.max_hours = float(cfg["subagent_max_hours"] if depth else cfg["max_hours"])
         self.sleep = sleep or (lambda s: self.stop_event.wait(s))
         self.on_update = on_update
         os.makedirs(self.workspace, exist_ok=True)
@@ -220,13 +230,14 @@ class Agent:
         self.no_tool_streak = 0
         self.run_start = None
         self.finished_summary = None
+        self.subs = SubagentManager(self)
 
     # ------------------------------------------------------------- Statistik/Logs
     def _load_stats(self):
         base = {"prompt_tokens": 0, "cached_tokens": 0, "completion_tokens": 0,
                 "calls": 0, "retries": 0, "compressions": 0, "cost_usd": 0.0,
                 "tool_calls": 0, "green_suites": 0, "active_seconds": 0.0,
-                "finish_rejections": 0, "runs": 0, "last_error": ""}
+                "finish_rejections": 0, "runs": 0, "last_error": "", "subagents": 0}
         old = read_json(os.path.join(self.data_dir, "stats.json"), {})
         if self.resume or old:
             base.update({k: v for k, v in old.items() if k in base})
@@ -244,11 +255,16 @@ class Agent:
         extra = (self.clock() - self.run_start) if self.run_start else 0
         return self.stats["active_seconds"] + extra
 
-    def log(self, line):
-        ts = time.strftime("%H:%M:%S")
-        line = f"{ts} {line}"
+    def log(self, line, child_line=False):
+        if not child_line:
+            line = f"{time.strftime('%H:%M:%S')} {line}"
         self.logs.append(line)
         self.textlog.write(line + "\n")
+        if self.on_log:
+            try:
+                self.on_log(line)
+            except Exception:
+                pass
         if self.on_update:
             try:
                 self.on_update(self)
@@ -288,10 +304,25 @@ class Agent:
         self._jsonl("usage", prompt_tokens=pt, completion_tokens=ct, cached_tokens=cached)
 
     # ------------------------------------------------------------- API-Aufruf
+    def subagents_allowed(self):
+        return self.depth == 0 and bool(self.cfg["subagents_enabled"]) \
+            and self.task.get("mode") != "generator"
+
+    def tools(self):
+        return TOOLS + SUBAGENT_TOOLS if self.subagents_allowed() else TOOLS
+
+    def live_stats(self):
+        """Eigene Statistik plus laufende Subagenten."""
+        s = dict(self.stats)
+        for k, v in self.subs.live_stats().items():
+            if k != "subagents":
+                s[k] = s.get(k, 0) + v
+        return s
+
     def _create(self, messages, with_tools=True):
         kwargs = dict(model=self.cfg["model"], messages=messages)
         if with_tools:
-            kwargs["tools"] = TOOLS
+            kwargs["tools"] = self.tools()
         if self.cfg.get("max_output_tokens"):
             kwargs["max_tokens"] = int(self.cfg["max_output_tokens"])
         if self.cfg.get("temperature") is not None:
@@ -470,11 +501,29 @@ class Agent:
         note = ("bash läuft in einer bubblewrap-Sandbox: nur erlaubte Ordner sind "
                 "beschreibbar." if self.bash.use_bwrap else
                 "Bleibe strikt in deinem Workspace.")
-        return SYSTEM_PROMPT.format(workspace=self.workspace, sandbox_note=note,
+        if self.depth:
+            scope = ", ".join(os.path.relpath(x, self.workspace) for x in self.scope) \
+                or "gesamter Workspace"
+            return SUB_SYSTEM_PROMPT.format(workspace=self.workspace, scope=scope,
+                                            limit=self.cfg["tool_output_limit"],
+                                            max_hours=self.max_hours)
+        text = SYSTEM_PROMPT.format(workspace=self.workspace, sandbox_note=note,
                                     limit=self.cfg["tool_output_limit"],
-                                    max_hours=self.cfg["max_hours"])
+                                    max_hours=self.max_hours)
+        if self.subagents_allowed():
+            text += SUBAGENT_PROMPT_SECTION.format(max_sub=self.cfg["max_subagents"])
+            if self.task.get("mode") == "swarm":
+                text += COORDINATOR_SECTION
+        return text
 
     def _base_messages(self):
+        if self.depth:
+            design = self._read_ws_file("DESIGN.md", 8000)
+            return [{"role": "system", "content": self._system_prompt()},
+                    {"role": "user", "content":
+                     f"# Arbeitspaket: {self.task['title']}\n(Teil des Projekts "
+                     f"\"{self.task.get('parent_title', '')}\")\n\n{self.task['prompt']}"
+                     + (f"\n\n## DESIGN.md des Projekts\n{design}" if design else "")}]
         return [{"role": "system", "content": self._system_prompt()},
                 {"role": "user", "content": f"# Aufgabe: {self.task['title']}\n\n"
                  f"{self.task['prompt']}\n\nArbeitsverzeichnis: {self.workspace}"}]
@@ -484,7 +533,9 @@ class Agent:
         for m in self._base_messages():
             self._add(m)
         has_progress = os.path.exists(os.path.join(self.workspace, "PROGRESS.md"))
-        if self.resume or has_progress:
+        if self.depth:
+            self._add({"role": "user", "content": "Beginne jetzt mit deinem Arbeitspaket."})
+        elif self.resume or has_progress:
             self._add({"role": "user", "content":
                        "# FORTSETZUNG\nDiese Aufgabe wurde bereits begonnen und nach einem "
                        "Neustart, Absturz oder Abbruch wieder aufgenommen."
@@ -531,6 +582,10 @@ class Agent:
 
     def _tool_write(self, args):
         p = self.guard.resolve(args.get("path", ""))
+        if self.scope and not any(p == s or p.startswith(s.rstrip(os.sep) + os.sep)
+                                  for s in self.scope):
+            return ("Fehler: außerhalb deines Schreibbereichs (scope: " +
+                    ", ".join(os.path.relpath(s, self.workspace) for s in self.scope) + ")")
         content = args.get("content")
         if not isinstance(content, str):
             return "Fehler: 'content' muss ein String sein"
@@ -570,7 +625,7 @@ class Agent:
 
     def _tool_finish(self, args):
         summary = str(args.get("summary") or "")
-        if self.cfg["verify_on_finish"] and \
+        if self.cfg["verify_on_finish"] and not self.depth and \
                 self.stats["finish_rejections"] < int(self.cfg["max_finish_rejections"]):
             code, out, _ = self.bash.run(self.cfg.get("verify_command") or
                                          "python3 -m pytest -q -p no:cacheprovider 2>&1 | tail -60",
@@ -603,7 +658,13 @@ class Agent:
         short = json.dumps(args, ensure_ascii=False)
         if name == "write_file":
             short = f"{args.get('path')} ({len(str(args.get('content', '')))} Zeichen)"
-        self.log(f"→ {name} {truncate(short, 160)}")
+        elif name == "subagent":
+            short = f"{args.get('name')} scope={args.get('scope') or 'Workspace'}"
+        elif name == "swarm" and isinstance(args.get("tasks"), list):
+            short = ", ".join(f"{t.get('name')}→{t.get('scope')}" for t in args["tasks"]
+                              if isinstance(t, dict))
+        short = short.replace("\n", " ")
+        self.log(f"→ {name} {short[:160] + ('…' if len(short) > 160 else '')}")
         try:
             if name == "bash":
                 res = self._tool_bash(args)
@@ -616,13 +677,16 @@ class Agent:
             elif name == "finish":
                 done, res = self._tool_finish(args)
                 return res, done
+            elif name in ("subagent", "swarm") and self.subagents_allowed():
+                res = (self.subs.tool_subagent(args) if name == "subagent"
+                       else self.subs.tool_swarm(args))
             else:
                 res = f"Fehler: unbekanntes Tool '{name}'"
         except PathError as e:
             res = f"Fehler: {e}"
         except FileNotFoundError as e:
             res = f"Fehler: Datei nicht gefunden: {e.filename}"
-        except StoppedError:
+        except (StoppedError, AuthError):
             raise
         except Exception as e:
             res = f"Fehler bei {name}: {type(e).__name__}: {e}"
@@ -642,12 +706,12 @@ class Agent:
             self._init_messages()
             self.log(f"Start: {self.task['title']}" +
                      (f" | {self.bash.warning}" if self.bash.warning else ""))
-            max_secs = float(self.cfg["max_hours"]) * 3600
+            max_secs = self.max_hours * 3600
             while True:
                 self._check_stop()
                 if self.active_seconds() >= max_secs:
                     outcome = {"outcome": "max_hours",
-                               "message": f"MAX_HOURS ({self.cfg['max_hours']} h) erreicht"}
+                               "message": f"MAX_HOURS ({self.max_hours} h) erreicht"}
                     break
                 if self.context_tokens >= int(self.cfg["compress_at"]):
                     self.compress("Schwelle erreicht")
@@ -657,6 +721,7 @@ class Agent:
                     msg["tool_calls"] = calls
                 self._add(msg)
                 if content.strip():
+                    self.last_text = content.strip()[-3000:]
                     self.log("💬 " + truncate(content.strip().replace("\n", " "), 200))
                 if not calls:
                     self.no_tool_streak += 1

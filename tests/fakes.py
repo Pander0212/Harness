@@ -1,6 +1,7 @@
 """Fake-OpenAI-Client für Tests."""
 import copy
 import json
+import threading
 from types import SimpleNamespace as NS
 
 
@@ -38,11 +39,13 @@ class FakeClient:
         self.script = list(script)
         self.default = default
         self.requests = []
+        self.lock = threading.Lock()
         self.chat = NS(completions=NS(create=self._create))
 
     def _create(self, **kwargs):
-        self.requests.append(copy.deepcopy(kwargs))
-        item = self.script.pop(0) if self.script else self.default
+        with self.lock:
+            self.requests.append(copy.deepcopy(kwargs))
+            item = self.script.pop(0) if self.script else self.default
         if callable(item) and not isinstance(item, NS):
             item = item(kwargs)
         if isinstance(item, BaseException):

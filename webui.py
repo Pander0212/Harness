@@ -121,8 +121,15 @@ class UIServer:
                 raise ValueError("Aufgabentext fehlt")
             new = m.add_task(d.get("title") or prompt.splitlines()[0][:60], prompt,
                              topic=d.get("topic", ""), source="manuell",
-                             front=bool(d.get("front")))
+                             front=bool(d.get("front")), mode=d.get("mode", "single"))
             return {"ok": True, "id": new}
+        if path == "/api/task/mode":
+            t = m.tasks.get(tid)
+            if not t or tid in m.agents:
+                return {"ok": False, "error": "nur für nicht laufende Aufgaben"}
+            t["mode"] = "swarm" if d.get("mode") == "swarm" else "single"
+            m.save()
+            return {"ok": True}
         if path == "/api/task/move":
             return {"ok": m.move(tid, d.get("dir", "up"))}
         if path == "/api/task/delete":

@@ -22,6 +22,7 @@ kleine Web-Oberfläche.
 | `manager.py` | Queue, Parallelität, Drosselung, Endlosmodus, Persistenz |
 | `generator.py` | Erzeugt neue, vielfältige Projektaufgaben |
 | `sandbox.py` | Pfadschutz, bash-Ausführung, bubblewrap-Sandbox |
+| `swarm.py` | Subagenten und Schwarm (parallele Kind-Agenten) |
 | `webui.py`, `ui.html` | Web-Oberfläche (http.server + Vanilla-JS) |
 | `tasks/*.md` | Fünf eingebaute Projektaufgaben |
 | `tests/` | Tests für den Harness (mit Fake-API-Client) |
@@ -171,6 +172,11 @@ verwenden oder (besser) Linux/WSL nutzen. Für 8 GB RAM `max_parallel` auf 2–3
 | `endless_mode` | true | bei leerer Queue neue Aufgaben generieren |
 | `verify_on_finish` | true | `finish` nur akzeptieren, wenn `pytest` grün ist |
 | `archive_finished` | false | fertige Workspaces als `.tar.gz` nach `archive/` |
+| `subagents_enabled` | true | Werkzeuge `subagent`/`swarm` für Hauptagenten |
+| `max_subagents` | 4 | max. Arbeitspakete pro Schwarm |
+| `max_total_subagents` | 8 | max. gleichzeitig laufende Subagenten insgesamt |
+| `subagent_max_hours` | 6 | Zeitlimit je Subagent |
+| `swarm_ratio` | 0.25 | Anteil generierter Aufgaben im Schwarm-Modus |
 | `sandbox` | auto | `auto`, `bwrap` oder `none` |
 | `price_input_per_m` / `price_output_per_m` | 0.135 / 2.25 | $ pro 1 Mio. Tokens |
 | `max_log_mb` / `log_keep` | 50 / 5 | Rotation der Gesprächsprotokolle |
@@ -192,6 +198,33 @@ Antworten ohne Tool-Call in Folge.
 Verlauf selbst zusammen. Danach beginnt ein neuer Verlauf aus Systemprompt, Aufgabe,
 Zusammenfassung sowie dem aktuellen Inhalt von `PROGRESS.md`, `DESIGN.md` und der
 Dateiliste; der Agent liest die relevanten Dateien anschließend neu ein.
+
+### Subagenten und Schwarm
+Hauptagenten haben zwei zusätzliche Werkzeuge:
+
+- **`subagent`** – delegiert eine abgegrenzte Teilaufgabe (Modul implementieren,
+  Testsuite schreiben, Fehlerursache suchen, Review) an einen Kind-Agenten mit
+  frischem Kontext. Der Aufruf blockiert, bis der Subagent `finish` meldet, und
+  liefert dessen Bericht samt Liste der geänderten Dateien zurück.
+- **`swarm`** – startet bis zu `max_subagents` Kind-Agenten **parallel** im selben
+  Workspace. Jedes Arbeitspaket braucht einen eigenen, überschneidungsfreien
+  Schreibbereich (`scope`); `write_file` setzt ihn durch, überlappende oder fehlende
+  Bereiche werden abgelehnt. Danach integriert der Hauptagent und testet alles.
+
+Subagenten haben einen eigenen Systemprompt, eigene Logs/Protokolle unter
+`data/tasks/<id>/sub/<nr>-<name>/`, nutzen dieselbe Fehlerbehandlung (4 Retries) und
+können selbst keine weiteren Subagenten starten. Ihre Tokens und Kosten fließen in die
+Statistik der Aufgabe ein (live im UI, mit eigener Zeile pro laufendem Subagenten).
+Stop/Herunterfahren beendet auch alle Subagenten; ein Auth-Fehler eines Subagenten
+bricht die Aufgabe ab. `max_total_subagents` begrenzt die gleichzeitig laufenden
+Subagenten über alle Aufgaben (wichtig für den Laptop).
+
+**Schwarm-Modus pro Aufgabe:** Beim Hinzufügen oder per Button „→ Schwarm“ wird eine
+Aufgabe zur Koordinator-Aufgabe. Der Hauptagent bekommt dann einen
+Koordinator-Prompt: Architektur und Schnittstellen in `DESIGN.md`, Arbeitspakete in
+`PLAN.md`, Pakete in Wellen per `swarm` verteilen, integrieren, gesamte Testsuite grün.
+Generierte Aufgaben werden mit Wahrscheinlichkeit `swarm_ratio` (Standard 0,25) im
+Schwarm-Modus gestartet.
 
 ### Fehlerbehandlung
 - 429, 5xx, Timeouts, Verbindungsfehler, leere/abgelehnte/abgebrochene Antworten:
@@ -251,4 +284,5 @@ archive/<id>.tar.gz              archivierte Workspaces (optional)
 Die Tests verwenden einen Fake-API-Client und prüfen u. a. die 4 Wiederholungen mit
 Wartezeiten und `continue`, Auth-Sperre, Abbruch und Weiterschalten, Drosselung und
 Erholung, Pfadschutz (`..`, Symlinks), Kürzung, Komprimierung, Queue, Generator,
-Fortsetzen nach Neustart und die Web-API.
+Fortsetzen nach Neustart, Subagenten/Schwarm (echte Parallelität, Scope-Schutz,
+globales Limit, Fehler- und Stop-Weitergabe) und die Web-API.
