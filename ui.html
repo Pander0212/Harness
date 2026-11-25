@@ -164,6 +164,8 @@ async function showPrompt(id) {
     w.document.body.innerHTML = "<pre style='white-space:pre-wrap;font:13px monospace'>" + esc(j.prompt) + "</pre>"; }
 }
 
+function sandboxHidden() { try { return localStorage.getItem("hideSandboxWarn") === "1"; } catch (e) { return false; } }
+function hideSandbox() { try { localStorage.setItem("hideSandboxWarn", "1"); } catch (e) {} render(); }
 function statusClass(s) { return "st st-" + (s.startsWith("retry") ? "retry" : s.split(" ")[0]); }
 
 function render() {
@@ -188,7 +190,9 @@ function render() {
   let b = "";
   if (S.auth_error) b += `<div class="banner err"><b>Authentifizierungsfehler – es werden keine Aufgaben gestartet.</b> Bitte API-Key/Modell prüfen und speichern.<br>${esc(S.auth_error)} <button onclick="clearAuth()">Sperre aufheben</button></div>`;
   if (S.config_problem) b += `<div class="banner err">${esc(S.config_problem)} – bitte unten in den Einstellungen eintragen.</div>`;
-  if (!S.sandbox_ok) b += `<div class="banner warn"><b>Achtung:</b> bash-Befehle der Agenten laufen NICHT abgeschottet (${esc(S.sandbox_msg)}). Installiere bubblewrap (siehe README) oder nutze einen eigenen Linux-Benutzer.</div>`;
+  if (!S.sandbox_ok && !sandboxHidden()) b += S.windows
+    ? `<div class="banner warn"><b>Hinweis (Windows):</b> Eine Sandbox gibt es nur unter Linux. Die Befehle der Agenten laufen daher mit den Rechten deines Windows-Benutzers – das ist unter Windows normal, der Harness funktioniert trotzdem. Für mehr Sicherheit einen eigenen Windows-Benutzer oder WSL verwenden (siehe README). <button onclick="hideSandbox()">Verstanden, ausblenden</button></div>`
+    : `<div class="banner warn"><b>Achtung:</b> bash-Befehle der Agenten laufen NICHT abgeschottet (${esc(S.sandbox_msg)}). Installiere bubblewrap (siehe README) oder nutze einen eigenen Linux-Benutzer. <button onclick="hideSandbox()">Ausblenden</button></div>`;
   if (S.shell_msg) b += `<div class="banner err">${esc(S.shell_msg)}</div>`;
   if (S.throttle_note) b += `<div class="banner warn">${esc(S.throttle_note)}</div>`;
   if (S.gen_error) b += `<div class="banner warn">Generator: ${esc(S.gen_error)}</div>`;

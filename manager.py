@@ -636,6 +636,7 @@ class Manager:
                 "paused": self.paused, "auth_error": self.auth_error,
                 "config_problem": self.config_problem(), "generating": self.generating,
                 "gen_error": self.gen_error, "sandbox_ok": self.sandbox_ok,
+                "windows": os.name == "nt",
                 "sandbox_msg": self.sandbox_msg, "shell_msg": self.shell_msg, "events": list(self.events)[-20:],
                 "tasks": tasks, "config": self.cfg.public(),
             }
