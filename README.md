@@ -1,0 +1,254 @@
+# Agent-Harness
+
+Ein schlanker, autonomer Coding-Agent-Harness in Python. Er lässt rund um die Uhr
+mehrere Agenten parallel an anspruchsvollen Software-Projekten arbeiten – test-driven,
+mit langen Sessions, vielen echten Tool-Calls und großem Kontext. Bedienung über eine
+kleine Web-Oberfläche.
+
+- Nur **Python 3**, das Paket **`openai`** und die Standardbibliothek (`pytest` wird für
+  die Tests und von den Agenten selbst genutzt).
+- OpenAI-kompatible API (Standard: `https://nano-gpt.com/api/v1`).
+- Mehrere Agenten als Threads in **einem** Prozess, Warteschlange, Endlosmodus mit
+  Aufgaben-Generator, automatische Drosselung bei Fehlern.
+- Sparsam: im Leerlauf praktisch keine CPU-Last, typischer RAM-Bedarf unter 200 MB
+  (plus das, was die Agenten selbst starten).
+
+## Inhalt
+
+| Datei | Zweck |
+|---|---|
+| `main.py` | Einstiegspunkt: startet Scheduler und Web-UI |
+| `agent.py` | Agent-Kern: Tool-Calling, Wiederholungen, Komprimierung, Statistik |
+| `manager.py` | Queue, Parallelität, Drosselung, Endlosmodus, Persistenz |
+| `generator.py` | Erzeugt neue, vielfältige Projektaufgaben |
+| `sandbox.py` | Pfadschutz, bash-Ausführung, bubblewrap-Sandbox |
+| `webui.py`, `ui.html` | Web-Oberfläche (http.server + Vanilla-JS) |
+| `tasks/*.md` | Fünf eingebaute Projektaufgaben |
+| `tests/` | Tests für den Harness (mit Fake-API-Client) |
+| `harness.service` | systemd-Unit für den Dauerbetrieb |
+| `start.sh` / `start.bat` | Start unter Linux/Mac bzw. Windows |
+
+## Schnellstart (lokal, Linux/Mac/Windows)
+
+```bash
+git clone <repo-url> harness && cd harness
+./start.sh                 # Windows: start.bat doppelklicken
+```
+
+`start.sh` legt beim ersten Start ein virtuelles Environment `.venv` an, installiert
+`openai` und `pytest` und erzeugt eine `config.json` mit Standardwerten.
+
+Dann im Browser **http://127.0.0.1:8765/** öffnen, unter *Einstellungen* API-Key und
+Modell eintragen und *Speichern* – die Agenten starten automatisch.
+
+Alternativ `config.example.json` nach `config.json` kopieren und dort `api_key` und
+`model` eintragen.
+
+## Einrichtung auf einem Linux-VPS (Debian/Ubuntu)
+
+```bash
+# 1. Pakete
+sudo apt update
+sudo apt install -y python3 python3-venv git bubblewrap
+
+# 2. Eigener Benutzer ohne Login und ohne sudo-Rechte (siehe unten)
+sudo useradd --system --create-home --home-dir /var/lib/harness --shell /usr/sbin/nologin harness
+
+# 3. Code nach /opt/harness
+sudo git clone <repo-url> /opt/harness
+sudo chown -R harness:harness /opt/harness
+cd /opt/harness
+sudo -u harness python3 -m venv .venv
+sudo -u harness .venv/bin/pip install -r requirements.txt
+
+# 4. Konfiguration
+sudo -u harness cp config.example.json config.json
+sudo -u harness nano config.json          # api_key und model eintragen
+sudo chmod 600 config.json
+
+# 5. Als Dienst starten (siehe "Dauerbetrieb mit systemd")
+sudo cp harness.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now harness
+sudo journalctl -u harness -f             # Log ansehen
+```
+
+Andere Distributionen: `bubblewrap` heißt fast überall so (`dnf install bubblewrap`,
+`pacman -S bubblewrap`).
+
+### Zugriff auf das UI per SSH-Tunnel
+
+Das UI lauscht standardmäßig nur auf `127.0.0.1:8765` und ist damit aus dem Internet
+nicht erreichbar. Vom eigenen Rechner aus:
+
+```bash
+ssh -N -L 8765:127.0.0.1:8765 benutzer@dein-vps
+```
+
+Danach lokal **http://127.0.0.1:8765/** öffnen. (Windows: gleiches Kommando in der
+PowerShell, oder in PuTTY unter *Connection → SSH → Tunnels* Quellport `8765`, Ziel
+`127.0.0.1:8765`.)
+
+### UI direkt freigeben (nicht empfohlen)
+
+In `config.json` `"ui_host": "0.0.0.0"` und ein starkes `"ui_password"` setzen. Ohne
+Passwort verweigert der Harness den Start auf einer öffentlichen Adresse. Der Login
+erfolgt per HTTP-Basic-Auth (Benutzername beliebig). Da die Verbindung unverschlüsselt
+ist, besser einen SSH-Tunnel oder einen Reverse-Proxy mit HTTPS verwenden.
+
+## Dauerbetrieb mit systemd
+
+`harness.service` startet den Harness beim Booten und nach Abstürzen automatisch neu
+(`Restart=always`). Bei `systemctl stop/restart` werden laufende Agenten sauber
+unterbrochen; nach dem Neustart setzen sie anhand ihrer `PROGRESS.md` fort. Auch nach
+einem harten Absturz (Stromausfall, OOM) werden Aufgaben mit Status „läuft“ beim
+nächsten Start automatisch vorne in die Queue gestellt und fortgesetzt.
+
+Pfade, Benutzer und `MemoryMax` in der Unit-Datei bei Bedarf anpassen. Liegt der
+Harness in einem Home-Verzeichnis, `ProtectHome=true` entfernen.
+
+## Sicherheit: Ordner-Begrenzung und Sandbox
+
+- **Dateiwerkzeuge** (`read_file`, `write_file`, `list_dir`) akzeptieren nur Pfade
+  innerhalb von `allowed_dirs` (Standard: `./workspaces`). Pfade werden vollständig
+  aufgelöst (`realpath`), d. h. `..`, Symlinks und Präfix-Tricks
+  (`/workspaces-evil`) werden erkannt. `config.json` und der `data`-Ordner sind immer
+  gesperrt.
+- **bash** läuft immer im Workspace der Aufgabe. Ist **bubblewrap** (`bwrap`)
+  installiert und funktionsfähig, läuft jeder Befehl in einer Sandbox:
+  - das gesamte Dateisystem ist **read-only**, nur `allowed_dirs` sind beschreibbar,
+  - `/home` und `/root` sind ausgeblendet (leeres tmpfs), außer den erlaubten Ordnern,
+  - eigenes `/tmp`, eigener PID-Namensraum, `config.json` ist überblendet,
+  - API-Keys werden aus der Umgebung entfernt.
+  - Netzwerk ist erlaubt (z. B. für `pip`); mit `"sandbox_network": false` abschaltbar.
+- Ohne bwrap zeigt das UI eine deutliche **Warnung**: bash ist dann *nicht*
+  abgeschottet.
+
+bwrap installieren: `sudo apt install bubblewrap`. Test:
+`bwrap --ro-bind / / --dev /dev --proc /proc true && echo ok`. Schlägt das unter
+Ubuntu 24.04+ fehl, blockiert AppArmor unprivilegierte User-Namespaces; Abhilfe:
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (dauerhaft per Datei
+in `/etc/sysctl.d/`). Ist bwrap auf deinem System setuid installiert (ältere
+Distributionen), in `harness.service` die Zeile `NoNewPrivileges=true` entfernen.
+
+### Agenten unter einem eigenen Linux-Benutzer ausführen
+
+Zusätzlich zur Sandbox (oder wenn bwrap nicht verfügbar ist) sollte der Harness unter
+einem eigenen, unprivilegierten Benutzer laufen. Dann können die Agenten höchstens das
+beschädigen, was diesem Benutzer gehört:
+
+```bash
+sudo useradd --system --create-home --home-dir /var/lib/harness --shell /usr/sbin/nologin harness
+sudo chown -R harness:harness /opt/harness
+sudo chmod 700 /opt/harness
+# Der Benutzer gehört in keine Gruppe mit Sonderrechten (sudo, docker, adm …):
+id harness
+```
+
+Manuell starten: `sudo -u harness /opt/harness/start.sh`. Die mitgelieferte
+`harness.service` verwendet bereits `User=harness`. Eigene Dateien anderer Benutzer
+sollten nicht weltweit lesbar sein (`chmod 700 ~`).
+
+### Windows / alter Laptop
+
+Unter Windows gibt es keine bwrap-Sandbox; bash-Befehle laufen über Git-Bash (falls
+installiert, sonst `cmd`). Am besten einen eigenen, eingeschränkten Windows-Benutzer
+verwenden oder (besser) Linux/WSL nutzen. Für 8 GB RAM `max_parallel` auf 2–3 setzen.
+
+## Konfiguration (`config.json`)
+
+| Schlüssel | Standard | Bedeutung |
+|---|---|---|
+| `api_key`, `model`, `base_url` | – | Zugang zur OpenAI-kompatiblen API |
+| `max_parallel` | 4 | gleichzeitige Agenten (im UI 1–20) |
+| `max_hours` | 36 | maximale aktive Laufzeit je Aufgabe |
+| `context_limit` / `compress_at` | 200000 / 170000 | Kontextgröße / Schwelle für Komprimierung |
+| `max_output_tokens` | 16384 | `max_tokens` pro Antwort |
+| `tool_output_limit` | 15000 | Kürzung der Tool-Ausgaben (Anfang + Ende) |
+| `bash_timeout` / `bash_max_timeout` | 600 / 3600 | Sekunden |
+| `retry_delays` | [10,20,40,60] | Wartezeiten vor Wiederholung 1–4 |
+| `allowed_dirs` | ["./workspaces"] | beschreibbare/lesbare Ordner |
+| `endless_mode` | true | bei leerer Queue neue Aufgaben generieren |
+| `verify_on_finish` | true | `finish` nur akzeptieren, wenn `pytest` grün ist |
+| `archive_finished` | false | fertige Workspaces als `.tar.gz` nach `archive/` |
+| `sandbox` | auto | `auto`, `bwrap` oder `none` |
+| `price_input_per_m` / `price_output_per_m` | 0.135 / 2.25 | $ pro 1 Mio. Tokens |
+| `max_log_mb` / `log_keep` | 50 / 5 | Rotation der Gesprächsprotokolle |
+| `ui_host`, `ui_port`, `ui_password` | 127.0.0.1, 8765, "" | Web-UI |
+
+## Funktionsweise
+
+### Agent
+Jeder Agent arbeitet in `workspaces/<aufgabe>/` mit den Werkzeugen `bash`,
+`read_file`, `write_file`, `list_dir` und `finish`. Der Systemprompt verlangt
+test-driven Arbeit, Tests nach jedem Feature, einen Ansatzwechsel nach drei
+gleichen Fehlschlägen und die Pflege von `DESIGN.md` und `PROGRESS.md`. `finish`
+wird nur akzeptiert, wenn `python3 -m pytest` im Workspace grün ist (abschaltbar).
+
+Ein Agent stoppt bei `finish`, nach `max_hours` aktiver Laufzeit oder nach vier
+Antworten ohne Tool-Call in Folge.
+
+**Kontext-Komprimierung:** Erreicht der Kontext 170k Tokens, fasst das Modell den
+Verlauf selbst zusammen. Danach beginnt ein neuer Verlauf aus Systemprompt, Aufgabe,
+Zusammenfassung sowie dem aktuellen Inhalt von `PROGRESS.md`, `DESIGN.md` und der
+Dateiliste; der Agent liest die relevanten Dateien anschließend neu ein.
+
+### Fehlerbehandlung
+- 429, 5xx, Timeouts, Verbindungsfehler, leere/abgelehnte/abgebrochene Antworten:
+  bis zu 4 Wiederholungen nach 10 s, 20 s, 40 s, 60 s. War eine Antwort
+  abgeschnitten, wird der Teil übernommen und `continue` angehängt.
+- Kontext zu lang (400/413 mit „context/token/length“): erst komprimieren, dann
+  erneut senden.
+- 401/403: sofortiger Abbruch, rotes Banner im UI, **keine** weiteren Starts, bis die
+  Einstellungen gespeichert wurden (oder „Sperre aufheben“).
+- Nach 4 erfolglosen Wiederholungen: Status „fehler“, Workspace bleibt erhalten,
+  sofort startet die nächste Aufgabe. „Fortsetzen“ nimmt sie später wieder auf.
+- 3 Abbrüche innerhalb von 10 Minuten senken die Parallelität um 1 (Anzeige im UI);
+  nach 30 fehlerfreien Minuten wird sie schrittweise wieder erhöht.
+
+### Endlosmodus und Aufgaben-Generator
+Ist die Queue leer, erzeugt ein Generator-Aufruf eine neue, ausführliche
+Projektaufgabe. Der Themenbereich wird vorab gewichtet gewählt (16 Bereiche wie
+Compiler, Datenbanken, Netzwerke, Kryptographie, Numerik, verteilte Systeme …): Die
+letzten drei Bereiche sind gesperrt, häufig genutzte und als „schwach“ markierte
+Bereiche werden seltener gewählt. Die vollständige Liste bisheriger Projekte
+(`data/history.json`) wird mitgegeben; zu ähnliche Titel, zu kurze Beschreibungen
+oder fehlende Teststrategie führen zu einer Überarbeitungsrunde.
+
+**Qualitätscheck:** Beendete Projekte mit weniger als 20 Tool-Calls oder ohne einzige
+grüne Testsuite werden als „schwach“ markiert.
+
+### Daten und Logs
+```
+data/state.json                  Queue und Aufgabenstatus
+data/history.json                alle abgeschlossenen Projekte
+data/harness.log                 Harness-Log (rotiert, 3 × 10 MB)
+data/tasks/<id>/task.md          Aufgabentext
+data/tasks/<id>/stats.json       Token-Statistik und Kosten
+data/tasks/<id>/conversation.jsonl  vollständiges Gesprächsprotokoll (rotiert, gzip)
+data/tasks/<id>/agent.log        Kurzlog des Agenten
+workspaces/<id>/                 Arbeitsordner des Agenten
+archive/<id>.tar.gz              archivierte Workspaces (optional)
+```
+
+## Web-Oberfläche
+- Oben: Tokens gesamt, verdiente $ gesamt, $ pro Stunde (gleitender Schnitt der
+  letzten Stunde), Hochrechnung auf 24 h, Parallelität, Queue-Länge.
+- Pro Aufgabe: Status (wartet / läuft / retry x/4 / fertig / fehler / schwach /
+  gestoppt), aktueller Kontext, Calls, Tool-Calls, Retries, Komprimierungen, Tokens,
+  Kosten, Laufzeit, letzte Fehlermeldung, Log (letzte 30 Zeilen).
+- Buttons: Start (sofort), Stop, Neustart (Workspace verwerfen), Fortsetzen,
+  Reihenfolge ändern, Löschen, Aufgabentext anzeigen; Endlosmodus an/aus; Pause.
+- Aufgaben hinzufügen, Einstellungen (API-Key, Modell, Parallelität, `max_hours`,
+  `allowed_dirs` …) bearbeiten und speichern.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest tests -q
+```
+
+Die Tests verwenden einen Fake-API-Client und prüfen u. a. die 4 Wiederholungen mit
+Wartezeiten und `continue`, Auth-Sperre, Abbruch und Weiterschalten, Drosselung und
+Erholung, Pfadschutz (`..`, Symlinks), Kürzung, Komprimierung, Queue, Generator,
+Fortsetzen nach Neustart und die Web-API.

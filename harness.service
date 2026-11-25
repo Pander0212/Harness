@@ -1,0 +1,33 @@
+# systemd-Unit für den Agent-Harness
+# Installation: siehe README.md (Abschnitt "Dauerbetrieb mit systemd")
+[Unit]
+Description=Autonomer Coding-Agent-Harness
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=harness
+Group=harness
+WorkingDirectory=/opt/harness
+ExecStart=/opt/harness/.venv/bin/python /opt/harness/main.py
+Restart=always
+RestartSec=15
+# Agenten werden bei SIGTERM sauber unterbrochen und nach dem Neustart fortgesetzt
+KillSignal=SIGTERM
+TimeoutStopSec=90
+Nice=5
+# Ressourcen schonen (für kleine VPS/Laptops anpassen)
+MemoryMax=4G
+TasksMax=2048
+# Grundhärtung
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# /home für den Dienst unsichtbar machen (Harness liegt unter /opt). Entfernen, falls
+# der Harness in einem Home-Verzeichnis liegt.
+ProtectHome=true
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

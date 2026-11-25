@@ -1,0 +1,9 @@
+config.json
+config.json.tmp
+data/
+workspaces/
+archive/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
