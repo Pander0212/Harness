@@ -961,7 +961,10 @@ class Agent:
         self.status = "läuft"
         outcome = {"outcome": "error", "message": "unbekannt"}
         try:
-            if (self.depth == 0 and self.cfg.get("spec_docs")
+            want_docs = self.task.get("spec_docs")
+            if want_docs is None:
+                want_docs = bool(self.cfg.get("spec_docs"))
+            if (self.depth == 0 and want_docs
                     and self.task.get("mode") != "generator" and not self.docs_exist()
                     and not os.path.exists(os.path.join(self.workspace, "PROGRESS.md"))):
                 try:

@@ -76,6 +76,9 @@ details summary { cursor:pointer; color:var(--dim); }
     <div class="row"><input id="newTitle" placeholder="Titel" style="flex:1">
       <select id="newMode"><option value="single">Einzelagent</option>
         <option value="swarm">Schwarm (Koordinator + Subagenten)</option></select>
+      <select id="newSpec"><option value="">SPEC/TESTPLAN: wie Einstellung</option>
+        <option value="1">SPEC/TESTPLAN vorab erzeugen</option>
+        <option value="0">ohne SPEC/TESTPLAN</option></select>
       <label><input type="checkbox" id="newFront"> vorne einreihen</label></div>
     <textarea id="newPrompt" rows="8" placeholder="Ausführliche Aufgabenbeschreibung (Markdown)…"></textarea>
     <div class="row"><button onclick="addTask()">Hinzufügen</button></div>
@@ -138,7 +141,8 @@ async function clearAuth() { await api("/api/clear_auth", {}); refresh(); }
 async function addTask() {
   const prompt = $("newPrompt").value.trim(); if (!prompt) return alert("Text fehlt");
   await api("/api/task/add", {title: $("newTitle").value, prompt, front: $("newFront").checked,
-    mode: $("newMode").value});
+    mode: $("newMode").value,
+    spec_docs: $("newSpec").value === "" ? null : $("newSpec").value === "1"});
   $("newPrompt").value = ""; $("newTitle").value = ""; refresh();
 }
 function fillSettings(force) {
@@ -225,11 +229,13 @@ function render() {
     actions += btn("restart", "Neustart");
     if (q) actions += `<button onclick="act('move','${id}',{dir:'up'})">▲</button><button onclick="act('move','${id}',{dir:'down'})">▼</button><button onclick="act('move','${id}',{dir:'top'})">⤒</button>`;
     if (!x.running) actions += btn("delete", "Löschen") +
-      `<button onclick="act('mode','${id}',{mode:'${x.mode === "swarm" ? "single" : "swarm"}'})">${x.mode === "swarm" ? "→ Einzel" : "→ Schwarm"}</button>`;
+      `<button onclick="act('mode','${id}',{mode:'${x.mode === "swarm" ? "single" : "swarm"}'})">${x.mode === "swarm" ? "→ Einzel" : "→ Schwarm"}</button>` +
+      `<button title="SPEC/TESTPLAN vorab: Standard → an → aus" onclick="act('spec','${id}',{spec_docs:${x.spec_docs === null || x.spec_docs === undefined ? "true" : x.spec_docs === true ? "false" : "null"}})">SPEC: ${x.spec_docs === true ? "an" : x.spec_docs === false ? "aus" : "Std."}</button>`;
     actions += `<button onclick="toggleLog('${id}')">Log</button><button onclick="showPrompt('${id}')">Text</button>`;
     let status = x.status + (q ? ` (#${q})` : "");
     if (x.weak && x.status !== "schwach") status += " · schwach";
-    const badge = x.mode === "swarm" ? `<span class="badge">Schwarm</span>` : "";
+    const badge = (x.mode === "swarm" ? `<span class="badge">Schwarm</span>` : "") +
+      (x.spec_docs === false ? `<span class="badge">ohne SPEC</span>` : x.spec_docs === true ? `<span class="badge">mit SPEC</span>` : "");
     const subInfo = s.subagents ? ` · ${s.subagents} Subagenten` : "";
     const row = `<tr><td><b>${esc(x.title)}</b>${badge}<div class="small">${esc(x.topic)} · ${esc(x.source)}${subInfo}${x.note ? " · " + esc(x.note) : ""}</div>
       ${x.last_error ? `<div class="small err">${esc(x.last_error)}</div>` : ""}</td>

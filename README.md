@@ -24,7 +24,7 @@ kleine Web-Oberfläche.
 | `sandbox.py` | Pfadschutz, bash-Ausführung, bubblewrap-Sandbox |
 | `swarm.py` | Subagenten und Schwarm (parallele Kind-Agenten) |
 | `webui.py`, `ui.html` | Web-Oberfläche (http.server + Vanilla-JS) |
-| `tasks/*.md` | Fünf eingebaute Projektaufgaben |
+| `tasks/*.md` | 25 eingebaute Projektaufgaben (je ca. 8 Stunden Arbeit) |
 | `tests/` | Tests für den Harness (mit Fake-API-Client) |
 | `harness.service` | systemd-Unit für den Dauerbetrieb |
 | `start.sh` / `start.bat` | Start unter Linux/Mac bzw. Windows |
@@ -314,6 +314,27 @@ Schwarm-Modus gestartet.
 - 3 Abbrüche innerhalb von 10 Minuten senken die Parallelität um 1 (Anzeige im UI);
   nach 30 fehlerfreien Minuten wird sie schrittweise wieder erhöht. Mit dem Button
   „Drosselung zurücksetzen“ im UI sofort wieder volle Parallelität.
+
+### Eingebaute Aufgaben
+`tasks/*.md` enthält 25 große Projekte (u. a. SQL-Datenbank, Interpreter, Git-Klon,
+HTTP-Server, RISC-V-Emulator, TCP/IP-Stack, Raft, LSM-Speicher, Kryptographie,
+Pathtracer, Bild-Codecs, SAT/SMT-Solver, Schach-Engine, Physik-Engine, OS-Simulator,
+WebAssembly, Scheme-Compiler, DataFrames, Numerik, Autograd/Transformer, Build-System,
+Suchmaschine, Regex/Parser-Generator, MQTT-Broker, Tabellenkalkulation), jeweils auf
+etwa 8 Stunden Arbeit ausgelegt. Neue Dateien in `tasks/` werden bei jedem Start erkannt
+und hinten an die Queue gehängt. Ein optionaler Kopf steuert die Aufgabe:
+
+```
+---
+spec_docs: false     # keine SPEC.md/TESTPLAN.md vorab (true = immer, fehlt = Einstellung)
+mode: swarm          # als Schwarm-Koordinator starten
+topic: crypto        # Themenbereich (für Statistik und Generator)
+---
+# Titel der Aufgabe
+...
+```
+
+Im UI lässt sich beides pro Aufgabe umschalten („SPEC: Std./an/aus“, „→ Schwarm“).
 
 ### Endlosmodus und Aufgaben-Generator
 Ist die Queue leer, erzeugt ein Generator-Aufruf eine neue, ausführliche

@@ -53,7 +53,11 @@ BEREITS VORHANDENE PROJEKTE (keines davon wiederholen, auch nicht leicht abgewan
 
 ANFORDERUNGEN AN DIE AUFGABE
 - Anspruchsvolles, in sich geschlossenes Software-Projekt in Python 3 (nur Standardbibliothek)
-  mit pytest, Umfang: mehrere Stunden konzentrierte Arbeit, mehrere Module.
+  mit pytest. Umfang: mindestens 8 Stunden ununterbrochene Arbeit für einen erfahrenen
+  Entwickler – mindestens 8 Module bzw. Komponenten, mindestens 250 Testfälle,
+  differenzielle oder Eigenschaftstests gegen eine Referenz (Standardbibliothek,
+  Brute-Force-Implementierung, offizielle Testvektoren o. Ä.), Robustheits- und
+  Leistungstests mit dokumentierten Messwerten.
 - Gliederung wie im Stilbeispiel: Ziel, detaillierte funktionale Anforderungen
   (nummeriert, konkret), Architekturvorgaben, Teststrategie mit konkreten Testfällen und
   Mindestanzahl Tests, Abnahmekriterien.

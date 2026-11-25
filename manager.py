@@ -99,6 +99,7 @@ class Manager:
     def _load(self):
         st = read_json(self.state_path, None)
         if st is None:
+            self.builtin_loaded = []
             self._add_builtin_tasks()
             self.event("Eingebaute Aufgaben geladen")
         else:
@@ -117,6 +118,14 @@ class Manager:
                 self.queue.insert(0, i)
             if interrupted:
                 self.event(f"{len(interrupted)} unterbrochene Aufgabe(n) werden fortgesetzt")
+            self.builtin_loaded = st.get("builtin_loaded")
+            if self.builtin_loaded is None:  # ältere state.json: anhand der Titel erkennen
+                titles = {t["title"] for t in self.tasks.values()}
+                self.builtin_loaded = [os.path.basename(p) for p in self._builtin_files()
+                                       if self._read_task_file(p)[0] in titles]
+            n = self._add_builtin_tasks()
+            if n:
+                self.event(f"{n} neue eingebaute Aufgabe(n) zur Queue hinzugefügt")
         self.save()
 
     def save(self):
@@ -124,7 +133,8 @@ class Manager:
             atomic_write_json(self.state_path, {
                 "tasks": self.tasks, "queue": self.queue,
                 "endless_mode": self.cfg["endless_mode"], "paused": self.paused,
-                "generator_totals": self.base_totals})
+                "generator_totals": self.base_totals,
+                "builtin_loaded": getattr(self, "builtin_loaded", [])})
 
     def _save_history(self):
         atomic_write_json(self.history_path, self.history)
@@ -134,14 +144,45 @@ class Manager:
         self.events.append(line)
         log.info(text)
 
+    def _builtin_files(self):
+        def order(p):
+            m = re.match(r"(\d+)", os.path.basename(p))
+            return (int(m.group(1)) if m else 10 ** 6, os.path.basename(p))
+        return sorted(glob.glob(os.path.join(self.tasks_dir, "*.md")), key=order)
+
+    @classmethod
+    def _read_task_file(cls, path):
+        """-> (titel, text, optionen). Optionaler Kopf zwischen '---'-Zeilen:
+        spec_docs: true/false, mode: single/swarm, topic: <bereich>"""
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        opts = {}
+        m = re.match(r"\s*---\s*\n(.*?)\n---\s*\n", text, re.S)
+        if m:
+            for line in m.group(1).splitlines():
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    v = v.strip()
+                    opts[k.strip()] = {"true": True, "false": False}.get(v.lower(), v)
+            text = text[m.end():]
+        title, body = cls._split_title(text, os.path.basename(path))
+        return title, body, opts
+
     def _add_builtin_tasks(self):
-        for path in sorted(glob.glob(os.path.join(self.tasks_dir, "*.md"))):
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
-            title, body = self._split_title(text, os.path.basename(path))
-            key = re.sub(r"^\d+[_-]", "", os.path.splitext(os.path.basename(path))[0])
-            self.add_task(title, body, topic=BUILTIN_TOPICS.get(key.split("_")[0], key),
-                          source="eingebaut")
+        """Fügt alle noch nicht geladenen tasks/*.md hinzu. -> Anzahl."""
+        n = 0
+        for path in self._builtin_files():
+            name = os.path.basename(path)
+            if name in self.builtin_loaded:
+                continue
+            title, body, opts = self._read_task_file(path)
+            key = re.sub(r"^\d+[_-]", "", os.path.splitext(name)[0])
+            topic = opts.get("topic") or BUILTIN_TOPICS.get(key.split("_")[0], key)
+            self.add_task(title, body, topic=topic, source="eingebaut",
+                          mode=opts.get("mode", "single"), spec_docs=opts.get("spec_docs"))
+            self.builtin_loaded.append(name)
+            n += 1
+        return n
 
     @staticmethod
     def _split_title(text, fallback):
@@ -162,7 +203,8 @@ class Manager:
     def task_dir(self, tid):
         return os.path.join(self.data_dir, "tasks", tid)
 
-    def add_task(self, title, prompt, topic="", source="manuell", front=False, mode="single"):
+    def add_task(self, title, prompt, topic="", source="manuell", front=False, mode="single",
+                 spec_docs=None):
         with self.lock:
             title = (title or "").strip() or "Aufgabe"
             tid = self._new_id(title)
@@ -174,7 +216,8 @@ class Manager:
                                "status": "wartet", "weak": False, "resume": False,
                                "created": self.clock(), "started": None, "finished": None,
                                "last_error": "", "note": "", "stats": {},
-                               "mode": "swarm" if mode == "swarm" else "single"}
+                               "mode": "swarm" if mode == "swarm" else "single",
+                               "spec_docs": spec_docs if isinstance(spec_docs, bool) else None}
             if front:
                 self.queue.insert(0, tid)
             else:
@@ -398,7 +441,7 @@ class Manager:
             self.queue.insert(0, tid)
             return False
         task = {"id": tid, "title": t["title"], "prompt": self.get_prompt(tid),
-                "mode": t.get("mode", "single")}
+                "mode": t.get("mode", "single"), "spec_docs": t.get("spec_docs")}
         ag = Agent(task, self.cfg, client, os.path.join(self.ws_dir, tid), self.task_dir(tid),
                    resume=bool(t.get("resume")), sleep=self.agent_sleep, clock=self.clock,
                    sub_semaphore=self.sub_semaphore)
@@ -644,7 +687,7 @@ class Manager:
                         t.get("topic"), t.get("topic", "")), "source": t.get("source"),
                     "status": ag.status if ag else t["status"],
                     "running": ag is not None, "weak": t.get("weak", False),
-                    "mode": t.get("mode", "single"),
+                    "mode": t.get("mode", "single"), "spec_docs": t.get("spec_docs"),
                     "subagents_live": ag.subs.info() if ag else [],
                     "request": ag.request_status() if ag else None,
                     "queue_pos": self.queue.index(tid) + 1 if tid in self.queue else None,

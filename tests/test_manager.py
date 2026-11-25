@@ -355,3 +355,56 @@ def test_client_creation_failure_does_not_hang(cfg, tmp_path):
     m.auth_error = ""
     m.tick()
     assert not m.generating and "httpx" in m.auth_error
+
+
+def test_task_front_matter_and_incremental_builtin_load(cfg, tmp_path):
+    tdir = tmp_path / "tasks_fm"
+    tdir.mkdir()
+    (tdir / "1_sql.md").write_text("# SQL\nText A")
+    m = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    assert len(m.tasks) == 1
+    (tdir / "2_neu.md").write_text("---\nspec_docs: false\nmode: swarm\ntopic: crypto\n---\n"
+                                   "# Neue Aufgabe\nText B")
+    (tdir / "10_zehn.md").write_text("# Zehn\nText C")
+    m2 = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    titles = [m2.tasks[i]["title"] for i in m2.queue]
+    assert titles == ["SQL", "Neue Aufgabe", "Zehn"]        # numerisch sortiert, nichts doppelt
+    neu = next(t for t in m2.tasks.values() if t["title"] == "Neue Aufgabe")
+    assert neu["spec_docs"] is False and neu["mode"] == "swarm" and neu["topic"] == "crypto"
+    assert m2.get_prompt(neu["id"]) == "Text B"
+    m3 = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    assert len(m3.tasks) == 3
+
+
+def test_old_state_without_builtin_list(cfg, tmp_path):
+    tdir = tmp_path / "tasks_old"
+    tdir.mkdir()
+    (tdir / "1_a.md").write_text("# Alt\nx")
+    m = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    st = json.load(open(m.state_path))
+    del st["builtin_loaded"]                      # Zustand einer älteren Version
+    json.dump(st, open(m.state_path, "w"))
+    (tdir / "2_b.md").write_text("# Neu\ny")
+    m2 = Manager(cfg, client_factory=lambda c: FakeClient(), tasks_dir=str(tdir))
+    assert sorted(t["title"] for t in m2.tasks.values()) == ["Alt", "Neu"]
+
+
+def test_per_task_spec_docs_override(cfg, tmp_path):
+    cfg.data["spec_docs"] = True
+
+    def brain(kw):
+        if "tools" not in kw:
+            return resp(content="# DOC\n" + "x " * 50)
+        return finish()
+    client = FakeClient(default=brain)
+    m = make(cfg, tmp_path, client)
+    a = m.add_task("Ohne", "x", spec_docs=False)
+    m.tick()
+    wait_idle(m)
+    assert not [r for r in client.requests if "tools" not in r]
+    assert not os.path.exists(os.path.join(m.ws_dir, a, "docs"))
+    cfg.data["spec_docs"] = False
+    b = m.add_task("Mit", "y", spec_docs=True)
+    m.tick()
+    wait_idle(m)
+    assert os.path.exists(os.path.join(m.ws_dir, b, "docs", "SPEC.md"))
