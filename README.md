@@ -210,7 +210,8 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `context_limit` / `compress_at` | 200000 / 170000 | Kontextgröße / Schwelle für Komprimierung |
 | `max_output_tokens` | 8192 | `max_tokens` pro Antwort (an das Limit des Modells anpassen) |
 | `stream` | true | Antworten streamen: Live-Fortschritt im UI, Hänger-Erkennung |
-| `stall_timeout` | 600 | so viele Sekunden ohne neue Daten gelten als Hänger → neuer Versuch (nano-gpt puffert Tool-Calls, daher großzügig) |
+| `stall_timeout` | 180 | so viele Sekunden ohne neue Daten gelten als Hänger → sofort neuer Versuch |
+| `stall_timeout_preparing` | 600 | Grenze, solange nano-gpt „preparing“ meldet (Tool-Call wird gepuffert erzeugt) |
 | `tool_output_limit` | 15000 | Kürzung der Tool-Ausgaben (Anfang + Ende) |
 | `bash_timeout` / `bash_max_timeout` | 600 / 3600 | Sekunden |
 | `max_retries` | 10 | Wiederholungen pro Anfrage (im UI 0–100) |

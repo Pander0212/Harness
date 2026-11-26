@@ -20,7 +20,8 @@ DEFAULTS = {
     "temperature": None,
     "request_timeout": 900,
     "stream": True,              # Antworten streamen (Live-Fortschritt, Hänger-Erkennung)
-    "stall_timeout": 600,        # Streaming: so viele Sekunden ohne Daten = Hänger
+    "stall_timeout": 180,        # Streaming: so viele Sekunden ohne Daten = Hänger
+    "stall_timeout_preparing": 600,  # ... solange der Anbieter "preparing" (Tool-Call) meldet
     "tool_output_limit": 15000,
     "bash_timeout": 600,
     "bash_max_timeout": 3600,
@@ -74,6 +75,7 @@ EDITABLE = {
     "max_retries": int, "retry_delays": list, "retry_overloaded_forever": bool,
     "overload_delay": float, "spec_docs": bool, "spec_doc_tokens": int,
     "max_output_tokens": int, "stall_timeout": float,
+    "stall_timeout_preparing": float,
 }
 
 _lock = threading.Lock()
@@ -139,7 +141,7 @@ class Config:
                 v = typ(v)
             if k == "overload_delay":
                 v = max(1.0, min(float(v), 300.0))
-            if k == "stall_timeout":
+            if k in ("stall_timeout", "stall_timeout_preparing"):
                 v = max(30.0, min(float(v), 3600.0))
             if k == "max_output_tokens":
                 v = max(256, min(int(v), 200000))

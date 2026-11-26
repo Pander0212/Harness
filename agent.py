@@ -2,6 +2,7 @@
 import collections
 import json
 import os
+import queue
 import random
 import re
 import threading
@@ -196,6 +197,10 @@ class BadResponse(Exception):
     pass
 
 
+class StreamStalled(Exception):
+    """Stream lieferte zu lange keine Daten (wird wie eine Überlastung wiederholt)."""
+
+
 class OverloadedResponse(Exception):
     """Modell/Server meldet Überlastung (auch als Antworttext)."""
 
@@ -273,6 +278,18 @@ STREAM_OPTIONS = {"ok": True}
 class _NS:
     def __init__(self, **kw):
         self.__dict__.update(kw)
+
+
+def _close_async(stream):
+    """Stream im Hintergrund schließen (ein hängender Lesevorgang darf nicht blockieren)."""
+    close = getattr(stream, "close", None)
+    if close:
+        def run():
+            try:
+                close()
+            except Exception:
+                pass
+        threading.Thread(target=run, daemon=True).start()
 
 
 def _get(obj, name, default=None):
@@ -465,12 +482,48 @@ class Agent:
         finally:
             self.req_info = None
 
+    def _watched(self, stream):
+        """Liest den Stream in einem Hilfs-Thread und bricht ab, wenn zu lange nichts kommt:
+        stall_timeout Sekunden normal, stall_timeout_preparing Sekunden, solange der
+        Anbieter meldet, dass er einen Tool-Call vorbereitet. Reagiert sofort auf Stop."""
+        q = queue.Queue()
+        end = object()
+
+        def reader():
+            try:
+                for c in stream:
+                    q.put(c)
+                q.put(end)
+            except BaseException as e:  # noqa: BLE001 - an den Agenten weiterreichen
+                q.put(e)
+        threading.Thread(target=reader, daemon=True, name="stream-reader").start()
+        last = time.monotonic()
+        while True:
+            try:
+                item = q.get(timeout=0.25)
+            except queue.Empty:
+                if self.stop_event.is_set():
+                    raise StoppedError("gestoppt")
+                phase = (self.req_info or {}).get("phase")
+                limit = float(self.cfg.get("stall_timeout_preparing", 600) if phase
+                              else self.cfg.get("stall_timeout", 180))
+                if time.monotonic() - last > limit:
+                    raise StreamStalled(f"Stream stalled: no data for {int(limit)} s "
+                                        f"(timed out{', phase ' + phase if phase else ''})")
+                continue
+            if item is end:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            last = time.monotonic()
+            yield item
+
     def _collect_stream(self, stream, messages=None):
         """Setzt eine gestreamte Antwort zusammen; zeigt den Fortschritt live an."""
         content, calls, refusal = [], {}, ""
         fr, usage, nchars = None, None, 0
         try:
-            for chunk in stream:
+            for chunk in self._watched(stream):
                 if self.stop_event.is_set():
                     raise StoppedError("gestoppt")
                 u = _get(chunk, "usage")
@@ -519,12 +572,7 @@ class Agent:
                 raise IncompleteResponse(f"Stream abgebrochen: {describe_error(e)}", text)
             raise
         finally:
-            close = getattr(stream, "close", None)
-            if close:
-                try:
-                    close()
-                except Exception:
-                    pass
+            _close_async(stream)
         tcs = [_NS(id=c["id"], type="function",
                    function=_NS(name=c["name"], arguments=c["arguments"] or "{}"))
                for _, c in sorted(calls.items())]

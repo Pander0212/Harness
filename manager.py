@@ -36,7 +36,10 @@ def slugify(text):
 def make_client(cfg):
     from openai import OpenAI
     total = float(cfg["request_timeout"])
-    read = float(cfg.get("stall_timeout", 300)) if cfg.get("stream", True) else total
+    # Lese-Timeout nur als Rückfallebene: die eigentliche Hänger-Erkennung macht der Agent
+    read = (max(float(cfg.get("stall_timeout", 180)),
+                float(cfg.get("stall_timeout_preparing", 600))) + 60
+            if cfg.get("stream", True) else total)
     try:  # Timeout-Klasse der jeweiligen openai-Version (httpx bzw. Nachfolger)
         from openai import Timeout
         timeout = Timeout(total, connect=30.0, read=read)
@@ -388,6 +391,8 @@ class Manager:
     def settings_changed(self, keys):
         with self.lock:
             self.client = None
+            if set(keys) & {"api_key", "base_url", "stall_timeout", "stall_timeout_preparing"}:
+                self._swap_clients()
             if self.auth_error:
                 self.event("Einstellungen gespeichert – Auth-Sperre aufgehoben")
             self.auth_error = ""
@@ -400,6 +405,20 @@ class Manager:
                 self.effective_parallel = int(self.cfg["max_parallel"])
                 self.throttle_note = ""
                 self.error_times.clear()
+
+    def _swap_clients(self):
+        """Neue Verbindungseinstellungen sofort an alle laufenden Agenten weitergeben."""
+        try:
+            client = self._get_client()
+        except Exception as e:
+            self.event(f"Neuer API-Client fehlgeschlagen: {e}")
+            return
+        agents = list(self.agents.values()) + ([self.gen_agent] if self.gen_agent else [])
+        for ag in agents:
+            ag.client = client
+            with ag.subs.lock:
+                for child in ag.subs.children.values():
+                    child.client = client
 
     def reset_throttle(self):
         with self.lock:

@@ -167,3 +167,54 @@ def test_tool_progress_phase_shown(cfg):
 
 def test_stall_timeout_setting(cfg):
     assert cfg.update({"stall_timeout": 5}) == ["stall_timeout"] and cfg["stall_timeout"] == 30
+
+
+def test_stall_detected_and_retried(cfg):
+    import time as _t
+    cfg.data.update(stall_timeout=0.3, retry_overloaded_forever=True)
+
+    def hanging():
+        yield chunk()
+        _t.sleep(3)                     # keine Daten mehr
+        yield chunk(content="zu spät")
+    client = FakeClient([hanging(), finish_stream()])
+    a = make(cfg, client)
+    t0 = _t.monotonic()
+    assert a.run()["outcome"] == "finished"
+    assert _t.monotonic() - t0 < 2.5
+    assert a.stats["overload_waits"] == 1 and "stalled" in a.stats["last_error"]
+
+
+def test_preparing_phase_gets_longer_limit(cfg):
+    import time as _t
+    cfg.data.update(stall_timeout=0.2, stall_timeout_preparing=5)
+
+    def slow_tool():
+        yield NS(choices=[NS(delta=NS(content=None, tool_calls=None, refusal=None),
+                             finish_reason=None)], usage=None,
+                 x_nanogpt_tool_progress={"status": "preparing"})
+        _t.sleep(0.8)                   # länger als stall_timeout, kürzer als preparing
+        yield from finish_stream()
+    client = FakeClient([slow_tool()])
+    a = make(cfg, client)
+    assert a.run()["outcome"] == "finished"
+    assert a.stats["overload_waits"] == 0
+
+
+def test_settings_change_reaches_running_agents(cfg, tmp_path):
+    from manager import Manager
+    (tmp_path / "t3").mkdir()
+    made = []
+
+    def factory(c):
+        made.append(FakeClient(default=tool("bash", command="sleep 0.2")))
+        return made[-1]
+    m = Manager(cfg, client_factory=factory, tasks_dir=str(tmp_path / "t3"))
+    tid = m.add_task("A", "x")
+    m.tick()
+    ag = m.agents[tid]
+    assert ag.client is made[0]
+    cfg.update({"stall_timeout": 120})
+    m.settings_changed(["stall_timeout"])
+    assert ag.client is made[-1] and len(made) == 2
+    m.shutdown(timeout=5)

@@ -93,6 +93,7 @@ details summary { cursor:pointer; color:var(--dim); }
       <label>Max. parallele Agenten (1–20)</label><input id="s_max_parallel" type="number" min="1" max="20">
       <label>Max. Output-Tokens pro Antwort (Modell-Limit)</label><input id="s_max_output_tokens" type="number" min="256" step="256">
       <label>Hänger-Erkennung: Sekunden ohne Daten</label><input id="s_stall_timeout" type="number" min="30" max="3600" step="30">
+      <label>… während „preparing“ (Tool-Call wird erzeugt)</label><input id="s_stall_timeout_preparing" type="number" min="30" max="3600" step="30">
       <label>Max. Retries pro Anfrage</label><input id="s_max_retries" type="number" min="0" max="100">
       <label>Wartezeit vor Retry (s, z. B. "5" oder "5,5,10,30")</label><input id="s_retry_delays">
       <label>Bei Überlastung endlos weiter versuchen</label><input id="s_retry_overloaded_forever" type="checkbox">
@@ -156,7 +157,7 @@ function fillSettings(force) {
   $("s_retry_overloaded_forever").checked = !!c.retry_overloaded_forever; $("s_overload_delay").value = c.overload_delay;
   $("s_spec_docs").checked = !!c.spec_docs; $("s_spec_doc_tokens").value = c.spec_doc_tokens;
   $("s_max_output_tokens").value = c.max_output_tokens;
-  $("s_stall_timeout").value = c.stall_timeout;
+  $("s_stall_timeout").value = c.stall_timeout; $("s_stall_timeout_preparing").value = c.stall_timeout_preparing;
   $("s_max_retries").value = c.max_retries; $("s_retry_delays").value = (c.retry_delays || []).join(", "); $("s_max_hours").value = c.max_hours;
   $("s_allowed_dirs").value = (c.allowed_dirs || []).join("\n");
   $("s_verify_on_finish").checked = !!c.verify_on_finish; $("s_archive_finished").checked = !!c.archive_finished;
@@ -168,7 +169,8 @@ async function saveSettings() {
   const d = {base_url: $("s_base_url").value.trim(), model: $("s_model").value.trim(),
     max_parallel: parseInt($("s_max_parallel").value || "4"),
     max_retries: parseInt($("s_max_retries").value || "10"),
-    stall_timeout: parseFloat($("s_stall_timeout").value || "600"),
+    stall_timeout: parseFloat($("s_stall_timeout").value || "180"),
+    stall_timeout_preparing: parseFloat($("s_stall_timeout_preparing").value || "600"),
     max_output_tokens: parseInt($("s_max_output_tokens").value || "8192"),
     retry_overloaded_forever: $("s_retry_overloaded_forever").checked,
     overload_delay: parseFloat($("s_overload_delay").value || "5"),
