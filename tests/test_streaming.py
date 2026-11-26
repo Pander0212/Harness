@@ -137,3 +137,33 @@ def test_throttle_reset(cfg, tmp_path):
     m.throttle_note = "Gedrosselt"
     m.reset_throttle()
     assert m.effective_parallel == 4 and m.throttle_note == ""
+
+
+def test_tool_progress_phase_shown(cfg):
+    seen = {}
+    gate = threading.Event()
+
+    def buffered():
+        yield chunk()
+        yield NS(choices=[NS(delta=NS(content=None, tool_calls=None, refusal=None),
+                             finish_reason=None)], usage=None,
+                 x_nanogpt_tool_progress={"status": "preparing"})
+        gate.wait(5)
+        yield from finish_stream()
+    client = FakeClient([buffered()])
+    a = make(cfg, client)
+    th = threading.Thread(target=a.run)
+    th.start()
+    for _ in range(500):
+        st = a.request_status()
+        if st and st.get("phase"):
+            seen = st
+            break
+        threading.Event().wait(0.01)
+    gate.set()
+    th.join(5)
+    assert seen["phase"] == "preparing"
+
+
+def test_stall_timeout_setting(cfg):
+    assert cfg.update({"stall_timeout": 5}) == ["stall_timeout"] and cfg["stall_timeout"] == 30

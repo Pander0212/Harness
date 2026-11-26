@@ -391,6 +391,8 @@ class Manager:
             if self.auth_error:
                 self.event("Einstellungen gespeichert – Auth-Sperre aufgehoben")
             self.auth_error = ""
+            if "stall_timeout" in keys:
+                self.client = None  # neuer Client mit neuem Timeout
             if "max_total_subagents" in keys:
                 self.sub_semaphore = threading.BoundedSemaphore(
                     max(1, int(self.cfg["max_total_subagents"])))

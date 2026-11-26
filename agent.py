@@ -417,7 +417,7 @@ class Agent:
         if not r:
             return None
         return {"label": r["label"], "seconds": round(self.clock() - r["started"]),
-                "tokens": int(r["chars"] / 3.5)}
+                "tokens": int(r["chars"] / 3.5), "phase": r.get("phase", "")}
 
     def live_stats(self):
         """Eigene Statistik plus laufende Subagenten."""
@@ -470,6 +470,10 @@ class Agent:
                 u = _get(chunk, "usage")
                 if u:
                     usage = u
+                prog = _get(chunk, "x_nanogpt_tool_progress") or \
+                    (_get(chunk, "model_extra") or {}).get("x_nanogpt_tool_progress")
+                if prog and self.req_info is not None:
+                    self.req_info["phase"] = str(_get(prog, "status") or "")[:30]
                 for ch in _get(chunk, "choices") or []:
                     d = _get(ch, "delta") or _get(ch, "message")
                     c = _get(d, "content")
