@@ -367,3 +367,72 @@ def test_request_timing_is_logged(cfg, sleeps):
     assert [r["ok"] for r in reqs] == [False, True]
     assert reqs[0]["kind"] == "overloaded" and reqs[0]["ctx"] > 0
     assert all("secs" in r for r in reqs)
+
+
+# ------------------------------------------------------------ Verlauf wiederherstellen
+
+def test_conversation_restored_after_restart(cfg, sleeps):
+    import threading
+    gate = threading.Event()
+
+    def blocking(kw):
+        gate.wait(5)
+        return tool("bash", command="echo spät")
+    script = [tool("write_file", path="PROGRESS.md", content="- [ ] alles"),
+              resp(content="Ich schaue mir das an.", calls=[("bash", {"command": "echo eins"})]),
+              blocking]
+    a = make_agent(cfg, FakeClient(script), sleeps)
+    th = threading.Thread(target=lambda: setattr(a, "out", a.run()))
+    th.start()
+    while len(a.messages) < 7:          # bis der dritte Aufruf läuft
+        threading.Event().wait(0.01)
+    a.stop()
+    gate.set()
+    th.join(5)
+    assert a.out["outcome"] == "stopped"
+    # zusätzlich einen unterbrochenen Tool-Call simulieren
+    a._add({"role": "assistant", "content": None, "tool_calls": [
+        {"id": "dangling", "type": "function", "function": {"name": "bash",
+                                                             "arguments": "{}"}}]})
+    client = FakeClient([finish()])
+    b = make_agent(cfg, client, sleeps, resume=True)
+    assert b.run()["outcome"] == "finished"
+    msgs = client.requests[0]["messages"]
+    texts = [m.get("content") or "" for m in msgs]
+    assert "Ich schaue mir das an." in texts
+    assert any("eins" in t for t in texts)                       # Tool-Ergebnis erhalten
+    dangling = [m for m in msgs if m.get("tool_call_id") == "dangling"]
+    assert dangling and "NOT executed" in dangling[0]["content"]
+    assert msgs[-1]["content"].startswith("# RESUMING")
+    assert "previous conversation is preserved" in msgs[-1]["content"]
+    assert msgs[0]["role"] == "system" and "WORKING RULES" in msgs[0]["content"]
+
+
+def test_no_restore_after_error(cfg, sleeps):
+    client = FakeClient([tool("write_file", path="PROGRESS.md", content="- [x] A\n- [ ] B")]
+                        + [FakeAPIError(500)] * 5)
+    a = make_agent(cfg, client, sleeps)
+    assert a.run()["outcome"] == "error"
+    client2 = FakeClient([finish()])
+    make_agent(cfg, client2, sleeps, resume=True).run()
+    msgs = client2.requests[0]["messages"]
+    assert len(msgs) == 3 and "Current content of PROGRESS.md" in msgs[2]["content"]
+
+
+def test_restore_after_compression_uses_new_segment(cfg, sleeps):
+    cfg.data["compress_at"] = 5000
+    holder = {}
+
+    def stop_after(kw):
+        holder["a"].stop()
+        return tool("bash", command="echo neu")
+    client = FakeClient([resp(calls=[("bash", {"command": "echo alt"})], prompt=6000),
+                         resp(content="SUMMARY-XYZ"), stop_after])
+    a = make_agent(cfg, client, sleeps)
+    holder["a"] = a
+    assert a.run()["outcome"] == "stopped"
+    assert a.stats["compressions"] == 1
+    client2 = FakeClient([finish()])
+    make_agent(cfg, client2, sleeps, resume=True).run()
+    texts = " ".join(m.get("content") or "" for m in client2.requests[0]["messages"])
+    assert "SUMMARY-XYZ" in texts and "echo alt" not in texts

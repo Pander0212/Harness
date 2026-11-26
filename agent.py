@@ -110,6 +110,11 @@ TRUNCATED_TOOL_MSG = (
     "most ~300 lines each) or break it into several modules. Continue now with the first "
     "part.")
 
+RESTORE_NOTE = (
+    "# RESUMING\nThe harness was restarted; your previous conversation is preserved above. "
+    "A tool call that was interrupted by the restart was not executed. Check the current "
+    "state (e.g. run the tests) and continue exactly where you left off.")
+
 NUDGE = ("You did not use a tool call. Keep working with the tools (bash, read_file, "
          "write_file, list_dir). If everything is truly finished and all tests pass, "
          "call `finish`.")
@@ -401,7 +406,8 @@ class Agent:
         self.stats["cached_tokens"] += cached
         self.stats["cost_usd"] += self._price(pt, ct)
         self.context_tokens = pt + ct
-        self._jsonl("usage", prompt_tokens=pt, completion_tokens=ct, cached_tokens=cached)
+        self._jsonl("usage", prompt_tokens=pt, completion_tokens=ct, cached_tokens=cached,
+                    est=self._estimate_tokens(sent_messages))
 
     # ------------------------------------------------------------- API-Aufruf
     def subagents_allowed(self):
@@ -761,6 +767,7 @@ class Agent:
         self.stats["compressions"] += 1
         n = self.stats["compressions"]
         self._jsonl("compression", number=n, summary=summary)
+        self._jsonl("context_start", reason="compression")
         new = self._base_messages()
         body = (f"# CONTEXT COMPRESSION #{n}\nThe previous history was summarized because "
                 f"of its length. Your own summary:\n\n{summary}"
@@ -814,11 +821,73 @@ class Agent:
                 {"role": "user", "content": f"# Task: {self.task['title']}\n\n"
                  f"{self.task['prompt']}\n\nWorking directory: {self.workspace}"}]
 
+    def _restore_messages(self):
+        """Stellt den Gesprächsverlauf seit dem letzten Kontextbeginn aus conversation.jsonl
+        wieder her. Unterbrochene Tool-Calls bekommen ein Ergebnis 'nicht ausgeführt'.
+        -> Liste von Nachrichten oder None."""
+        path = os.path.join(self.data_dir, "conversation.jsonl")
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                recs = []
+                for line in f:
+                    try:
+                        recs.append(json.loads(line))
+                    except ValueError:
+                        continue
+        except OSError:
+            return None
+        start = max((i for i, r in enumerate(recs) if r.get("type") == "context_start"),
+                    default=None)
+        if start is None:
+            return None
+        ends = [r for r in recs[start + 1:] if r.get("type") == "end"]
+        if ends and ends[-1].get("outcome") in ("error", "no_tool"):
+            return None  # der Verlauf selbst könnte das Problem sein -> frisch beginnen
+        msgs = [r["message"] for r in recs[start + 1:]
+                if r.get("type") == "message" and isinstance(r.get("message"), dict)]
+        if len(msgs) < 3 or msgs[0].get("role") != "system":
+            return None
+        out, pending = [], []
+
+        def close_pending():
+            for cid in pending:
+                out.append({"role": "tool", "tool_call_id": cid, "content":
+                            "Interrupted by a harness restart – this tool call was NOT "
+                            "executed."})
+            pending.clear()
+        for m in msgs:
+            role = m.get("role")
+            if role == "tool":
+                if m.get("tool_call_id") in pending:
+                    pending.remove(m.get("tool_call_id"))
+                    out.append(m)
+                continue  # verwaiste Tool-Ergebnisse auslassen
+            close_pending()
+            out.append(m)
+            if role == "assistant":
+                pending.extend(c["id"] for c in m.get("tool_calls") or [] if c.get("id"))
+        close_pending()
+        out[0] = {"role": "system", "content": self._system_prompt()}
+        return out
+
     def _init_messages(self):
         self.messages = []
+        has_progress = os.path.exists(os.path.join(self.workspace, "PROGRESS.md"))
+        restored = None
+        if not self.depth and (self.resume or has_progress) \
+                and self.cfg.get("restore_context", True):
+            restored = self._restore_messages()
+        self._jsonl("context_start", reason="resume" if restored else "start")
+        if restored:
+            for m in restored:
+                self._add(m)
+            self._add({"role": "user", "content": RESTORE_NOTE})
+            self.context_tokens = self._estimate_tokens(self.messages)
+            self.log(f"Verlauf wiederhergestellt ({len(restored)} Nachrichten, "
+                     f"ca. {self.context_tokens // 1000}k Tokens)")
+            return
         for m in self._base_messages():
             self._add(m)
-        has_progress = os.path.exists(os.path.join(self.workspace, "PROGRESS.md"))
         if self.depth:
             self._add({"role": "user", "content": "Start working on your work package now."})
         elif self.resume or has_progress:

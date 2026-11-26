@@ -31,6 +31,7 @@ DEFAULTS = {
     "retry_overloaded_forever": True,  # "busy/overloaded": endlos weiter versuchen
     "overload_delay": 5,         # Sekunden zwischen Versuchen bei Überlastung
     "retry_jitter": 0.2,         # ±20 % Zufallsstreuung der Wartezeit
+    "restore_context": True,     # nach Neustart/Fortsetzen den bisherigen Verlauf laden
     "spec_docs": True,           # vor dem Start SPEC.md + TESTPLAN.md erzeugen
     "spec_doc_tokens": 7000,    # Zielumfang je Dokument
     "allowed_dirs": ["./workspaces"],

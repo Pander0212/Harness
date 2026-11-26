@@ -36,6 +36,7 @@ def main():
     errors = collections.Counter()
     usd = 0.0
     tok_in = tok_out = n_usage = 0
+    ratios = []
     for fn in files:
         try:
             f = open(fn, encoding="utf-8", errors="replace")
@@ -64,12 +65,20 @@ def main():
                     n_usage += 1
                     tok_in += r.get("prompt_tokens", 0)
                     tok_out += r.get("completion_tokens", 0)
+                    if r.get("est"):
+                        ratios.append(r.get("prompt_tokens", 0) / max(1, r["est"]))
                     usd += (r.get("prompt_tokens", 0) * pin +
                             r.get("completion_tokens", 0) * pout) / 1e6
     print(f"Zeitraum: letzte {hours:g} h  |  Protokolle: {len(files)}")
     print(f"Erfolgreiche Aufrufe: {n_usage}  |  Input {tok_in / 1e6:.2f} M  |  "
           f"Output {tok_out / 1e6:.3f} M  |  Verdienst {usd:.2f} USD "
           f"({usd / hours:.2f} USD/h)")
+    if ratios:
+        ratios.sort()
+        med = ratios[len(ratios) // 2]
+        print(f"Gemeldete Input-Tokens / eigene Schätzung (Median): {med:.2f}"
+              + ("  -> Anbieter meldet deutlich weniger als geschickt (evtl. ohne Cache)!"
+                 if med < 0.6 else ""))
     if not req:
         print("\nNoch keine Anfrage-Messungen (erst ab dieser Version vorhanden).")
         return

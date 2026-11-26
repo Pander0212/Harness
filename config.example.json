@@ -24,6 +24,7 @@
   "retry_overloaded_forever": true,
   "overload_delay": 5,
   "retry_jitter": 0.2,
+  "restore_context": true,
   "spec_docs": true,
   "spec_doc_tokens": 7000,
   "allowed_dirs": [

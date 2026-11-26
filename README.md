@@ -218,6 +218,7 @@ Das Fenster von `start.bat` muss offen bleiben, solange die Agenten arbeiten
 | `retry_after_max` | 60 | bei 429 mit `Retry-After`: höchstens so lange warten |
 | `retry_overloaded_forever` | true | bei Überlastung („busy“, 429/502/503/504/529) endlos weiter versuchen |
 | `overload_delay` | 5 | Sekunden zwischen Versuchen bei Überlastung (±`retry_jitter`) |
+| `restore_context` | true | Verlauf nach Neustart/Fortsetzen wiederherstellen |
 | `spec_docs` | true | vor dem Start `docs/SPEC.md` und `docs/TESTPLAN.md` erzeugen |
 | `spec_doc_tokens` | 7000 | Zielumfang je Dokument (unter `max_output_tokens` halten) |
 | `allowed_dirs` | ["./workspaces"] | beschreibbare/lesbare Ordner |
@@ -248,6 +249,12 @@ wird nur akzeptiert, wenn `python3 -m pytest` im Workspace grün ist (abschaltba
 
 Ein Agent stoppt bei `finish`, nach `max_hours` aktiver Laufzeit oder nach vier
 Antworten ohne Tool-Call in Folge.
+
+**Verlauf bleibt über Neustarts erhalten:** Nach einem Neustart des Dienstes oder
+„Fortsetzen“ lädt der Agent seinen bisherigen Gesprächsverlauf aus
+`conversation.jsonl` und macht genau dort weiter (`restore_context`). Ein durch den
+Neustart unterbrochener Tool-Call wird als „nicht ausgeführt“ markiert. Endete der letzte
+Lauf mit einem Fehler, beginnt der Agent stattdessen frisch anhand von PROGRESS.md.
 
 **Kontext-Komprimierung:** Erreicht der Kontext 170k Tokens, fasst das Modell den
 Verlauf selbst zusammen. Danach beginnt ein neuer Verlauf aus Systemprompt, Aufgabe,
