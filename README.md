@@ -370,6 +370,13 @@ workspaces/<id>/                 Arbeitsordner des Agenten
 archive/<id>.tar.gz              archivierte Workspaces (optional)
 ```
 
+## Auswertung der Anfragen
+
+Jede API-Anfrage wird mit Dauer, Kontextgröße und Ergebnis protokolliert.
+`python3 analyze.py [Stunden]` zeigt Verdienst, Erfolgsquote und durchschnittliche Dauer
+je Kontextgröße sowie die häufigsten Fehler. Scheitern große Kontexte deutlich öfter
+(z. B. durch Timeouts beim Anbieter), lohnt es sich, `compress_at` zu senken.
+
 ## Web-Oberfläche
 - Oben: Tokens gesamt, verdiente $ gesamt, $ pro Stunde (gleitender Schnitt der
   letzten Stunde), Hochrechnung auf 24 h, Parallelität, Queue-Länge.

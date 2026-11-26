@@ -565,10 +565,14 @@ class Agent:
         while True:
             self._check_stop()
             msgs = self.messages if purpose == "main" else messages
+            t0 = time.time()
+            est = self._estimate_tokens(msgs)
             try:
                 resp = self._create(msgs, with_tools)
                 self._account(resp, msgs)
                 result = self._parse(resp)
+                self._jsonl("request", ok=True, secs=round(time.time() - t0, 1),
+                            ctx=self.context_tokens or est, purpose=purpose)
                 if attempt:
                     self.status = "läuft"
                 return result
@@ -577,6 +581,8 @@ class Agent:
             except Exception as e:
                 kind = classify_error(e)
                 text = describe_error(e)
+                self._jsonl("request", ok=False, secs=round(time.time() - t0, 1), ctx=est,
+                            purpose=purpose, kind=kind, error=text[:200])
                 self.stats["last_error"] = text
                 self._jsonl("error", error=text, kind=kind, attempt=attempt + 1)
                 if kind == "auth":

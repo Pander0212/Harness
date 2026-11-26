@@ -354,3 +354,16 @@ def test_write_file_append(cfg, sleeps):
     assert open(os.path.join(a.workspace, "m.py")).read() == "teil1\nteil2\n"
     res = [m["content"] for m in client.requests[-1]["messages"] if m["role"] == "tool"]
     assert "appended" in res[1]
+
+
+def test_request_timing_is_logged(cfg, sleeps):
+    cfg.data["retry_overloaded_forever"] = True
+    client = FakeClient([FakeAPIError(504, "Request timed out. Please try again later."),
+                         finish()])
+    a = make_agent(cfg, client, sleeps)
+    a.run()
+    recs = [json.loads(x) for x in open(os.path.join(a.data_dir, "conversation.jsonl"))]
+    reqs = [r for r in recs if r["type"] == "request"]
+    assert [r["ok"] for r in reqs] == [False, True]
+    assert reqs[0]["kind"] == "overloaded" and reqs[0]["ctx"] > 0
+    assert all("secs" in r for r in reqs)
